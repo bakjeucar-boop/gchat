@@ -23,6 +23,7 @@ from gchat.models import (
     max_request_tokens,
     model_ids,
     models_in_family,
+    requests_per_minute_at,
     resolve_thinking_level,
     thinking_label,
 )
@@ -37,8 +38,15 @@ EXPECTED_LIMITS = {
 # 계획서 1.4절 표 — (기본 컨텍스트 예산, 기본 최대 출력)
 EXPECTED_BUDGETS = {
     "gemini-3.5-flash-lite": (32_000, 4_096),
-    "gemma-4-31b-it": (3_000, 2_048),
-    "gemma-4-26b-a4b-it": (3_000, 2_048),
+    "gemma-4-31b-it": (3_000, 768),
+    "gemma-4-26b-a4b-it": (3_000, 768),
+}
+
+# 세션 2 실측 (models.get) — (context_window, max_output_tokens)
+MEASURED_LIMITS = {
+    "gemini-3.5-flash-lite": (1_048_576, 65_536),
+    "gemma-4-31b-it": (262_144, 32_768),
+    "gemma-4-26b-a4b-it": (262_144, 32_768),
 }
 
 # 계획서 1.2절 표
@@ -91,12 +99,23 @@ def test_계열이_계획서와_일치한다(model_id: str):
     assert get_model(model_id).family == EXPECTED_FAMILIES[model_id]
 
 
+@pytest.mark.parametrize("model_id", sorted(MEASURED_LIMITS))
+def test_컨텍스트_윈도우와_최대출력이_실측값과_일치한다(model_id: str):
+    """세션 2 실측값 (docs/api_findings.md A-1)."""
+    spec = get_model(model_id)
+    assert (spec.context_window, spec.max_output_tokens) == MEASURED_LIMITS[model_id]
+
+
 @pytest.mark.parametrize("spec", MODELS, ids=lambda s: s.id)
-def test_요청당_최대소비가_TPM의_90퍼센트를_넘지_않는다(spec: ModelSpec):
-    """계획서 1.4절 — 요청당 소비 = 컨텍스트 예산 + 최대 출력."""
-    worst_case = spec.default_context_budget + spec.default_max_output
-    assert worst_case <= spec.limits.tpm * SAFETY_MARGIN, (
-        f"{spec.id}: {worst_case:,} 토큰은 TPM {spec.limits.tpm:,} 의 90%를 넘는다"
+def test_컨텍스트_예산이_TPM의_90퍼센트를_넘지_않는다(spec: ModelSpec):
+    """계획서 1.4절 — TPM 을 소비하는 것은 입력, 즉 컨텍스트 예산뿐이다.
+
+    세션 2 실측으로 "예산 + 최대 출력" 이 아니라 "예산" 단독 기준이 됐다
+    (docs/api_findings.md B절).
+    """
+    assert spec.default_context_budget <= spec.limits.tpm * SAFETY_MARGIN, (
+        f"{spec.id}: 예산 {spec.default_context_budget:,} 은 "
+        f"TPM {spec.limits.tpm:,} 의 90%를 넘는다"
     )
 
 
@@ -180,6 +199,17 @@ def test_모든_모델이_시스템_인스트럭션을_지원한다():
 def test_요청당_토큰_상한은_TPM의_90퍼센트다():
     assert max_request_tokens("gemma-4-31b-it") == 14_400
     assert max_request_tokens("gemini-3.5-flash-lite") == 225_000
+
+
+def test_예산에_따른_분당_가능_횟수():
+    """계획서 1.5절 표의 근거 계산 (TPM 은 입력만 센다)."""
+    # Gemma: 가용 14,400 / 예산 3,000 = 4.8회. RPM 30 보다 TPM 이 먼저 걸린다.
+    assert requests_per_minute_at("gemma-4-31b-it", 3_000) == pytest.approx(4.8)
+    assert requests_per_minute_at("gemma-4-31b-it", 12_000) == pytest.approx(1.2)
+    # Gemini: 225,000 / 32,000 = 7.03회. 역시 RPM 15 보다 TPM 이 먼저다.
+    assert requests_per_minute_at("gemini-3.5-flash-lite", 32_000) == pytest.approx(7.03, abs=0.01)
+    # 예산이 아주 작으면 RPM 이 상한이 된다.
+    assert requests_per_minute_at("gemma-4-31b-it", 100) == 30.0
 
 
 def test_알_수_없는_모델은_명확한_오류를_낸다():

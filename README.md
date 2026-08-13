@@ -35,6 +35,16 @@ pytest
 ruff check .
 ```
 
+## 실측
+
+`scripts/probe_models.py`로 모델 한도·파라미터를 실호출로 확인한다.
+결과는 [docs/api_findings.md](docs/api_findings.md)에 있다.
+
+```
+python scripts/probe_models.py sdk
+```
+
 ## 상태
 
-세션 1 (골격 · 모델 테이블 · 인증 게이트) 완료. 응답 생성은 세션 2부터.
+세션 2 완료 — 골격 · 모델 테이블(실측 반영) · 인증 게이트 · Gemini 래퍼(`client.py`).
+채팅 화면은 세션 4부터.

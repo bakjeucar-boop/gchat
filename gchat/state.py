@@ -44,15 +44,15 @@ class Message:
 
 @dataclass
 class Settings:
-    """대화별 설정 (계획서 2.6 / 2.6.1 / 2.6.2 / 2.10절).
+    """대화별 설정 (계획서 2.6 / 2.6.1 / 2.6.2절).
 
     앱 전역 설정이 아니라 대화의 속성이다. 별도 설정 메뉴는 두지 않는다.
+    웹 검색 토글은 없다 — 계획서 2.10절이 세션 2 실측으로 v1에서 제외됐다.
     """
 
     thinking_level: str
     context_budget: int
     system_instruction: str = ""
-    web_search: bool = False  # 계획서 2.10절 — 새 대화마다 꺼짐으로 초기화
 
     @classmethod
     def for_model(cls, spec: ModelSpec, *, inherit: Settings | None = None) -> Settings:
@@ -61,14 +61,12 @@ class Settings:
         계획서 2.1.1절: 새 대화는 직전 대화의 응답 모드와 시스템 인스트럭션을
         이어받되, 컨텍스트 예산은 새 모델의 기본값으로 초기화한다. 응답 모드가
         새 모델에 없는 값이면 minimal 로 되돌린다.
-        웹 검색은 이어받지 않고 항상 꺼짐으로 시작한다 (계획서 2.10절).
         """
         level = inherit.thinking_level if inherit else spec.default_thinking_level
         return cls(
             thinking_level=resolve_thinking_level(spec.id, level),
             context_budget=spec.default_context_budget,
             system_instruction=inherit.system_instruction if inherit else "",
-            web_search=False,
         )
 
 

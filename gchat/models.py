@@ -3,6 +3,8 @@
 계획서 1.1 / 1.2 / 1.3 / 1.4절의 단일 진실 원천이다.
 UI · client · quota 는 이 테이블을 참조할 뿐 값을 하드코딩하지 않는다.
 새 모델을 추가할 때는 이 파일의 MODELS 만 수정한다.
+
+값의 출처는 세션 2 실측이다 (docs/api_findings.md).
 """
 
 from __future__ import annotations
@@ -45,8 +47,10 @@ class ModelSpec:
     max_output_tokens: int  # 모델 상한
     context_window: int
     limits: RateLimits
-    default_context_budget: int  # 계획서 1.4절
-    default_max_output: int  # TPM 계산용 내부 상수. UI 에 노출하지 않는다 (계획서 2.6절)
+    default_context_budget: int  # 계획서 1.4절. TPM 을 소비하는 것은 이 값뿐이다
+    default_max_output: int  # 내부 상수. UI 에 노출하지 않는다 (계획서 2.6절)
+    # TODO(수동): API 로 조회할 수 없다. 비용 표시(계획서 2.8절)를 구현할 때
+    # 공식 가격표를 보고 손으로 채운다.
     price_in_per_mtok: float | None
     price_out_per_mtok: float | None
 
@@ -68,13 +72,12 @@ MODELS: tuple[ModelSpec, ...] = (
         default_thinking_level="minimal",
         supports_system_instruction=True,
         supports_file_input=True,
-        # TODO(세션 2): max_output_tokens / context_window 는 실측 전 잠정값이다.
+        # 세션 2 실측 (models.get): input_token_limit / output_token_limit
         max_output_tokens=65_536,
         context_window=1_048_576,
         limits=RateLimits(rpm=15, tpm=250_000, rpd=500),
         default_context_budget=32_000,
         default_max_output=4_096,
-        # TODO(세션 2): 단가 확인 전까지 None. 비용 표시는 세션 4 이후 기능이다.
         price_in_per_mtok=None,
         price_out_per_mtok=None,
     ),
@@ -89,12 +92,15 @@ MODELS: tuple[ModelSpec, ...] = (
         # Gemma 4 도 Files API 로 이미지 입력은 지원하지만, TPM 16,000 과 예산 3,000
         # 아래에서는 첨부가 무의미하므로 계획서 2.9절 결정에 따라 게이팅한다.
         supports_file_input=False,
-        # TODO(세션 2): 부록 B-5 — 문서마다 256K / 1M 로 상이해 실측 필요.
-        max_output_tokens=8_192,
+        # 세션 2 실측 — 컨텍스트 256K, 최대 출력 32,768 (문서의 1M 설은 사실이 아니다)
+        max_output_tokens=32_768,
         context_window=262_144,
         limits=RateLimits(rpm=30, tpm=16_000, rpd=14_400),
         default_context_budget=3_000,
-        default_max_output=2_048,
+        # 실측 결정: 사고/출력은 TPM 을 쓰지 않으므로 대기 시간과 무관하지만,
+        # 긴 응답은 다음 턴의 입력이 되어 예산 3,000 을 한두 턴에 채운다.
+        # 계획서 1.4절의 "약 5턴"을 실제로 지키려고 768 로 묶는다.
+        default_max_output=768,
         price_in_per_mtok=None,
         price_out_per_mtok=None,
     ),
@@ -107,12 +113,12 @@ MODELS: tuple[ModelSpec, ...] = (
         default_thinking_level="minimal",
         supports_system_instruction=True,
         supports_file_input=False,
-        # TODO(세션 2): 부록 B-5 — 실측 필요.
-        max_output_tokens=8_192,
+        # 세션 2 실측 — 31B 와 동일
+        max_output_tokens=32_768,
         context_window=262_144,
         limits=RateLimits(rpm=30, tpm=16_000, rpd=14_400),
         default_context_budget=3_000,
-        default_max_output=2_048,
+        default_max_output=768,
         price_in_per_mtok=None,
         price_out_per_mtok=None,
     ),
@@ -164,5 +170,21 @@ def resolve_thinking_level(model_id: str, level: str | None) -> str:
 
 
 def max_request_tokens(model_id: str) -> int:
-    """이 모델에서 한 요청이 쓸 수 있는 실사용 토큰 상한 (TPM 의 90%)."""
+    """한 요청이 쓸 수 있는 실사용 **입력** 토큰 상한 (TPM 의 90%).
+
+    세션 2 실측: TPM 은 입력 토큰만 센다 (429 메트릭 input_token_count).
+    출력과 사고 토큰은 TPM 을 소비하지 않으므로 이 계산에 넣지 않는다.
+    """
     return int(get_model(model_id).limits.tpm * SAFETY_MARGIN)
+
+
+def requests_per_minute_at(model_id: str, context_budget: int) -> float:
+    """주어진 컨텍스트 예산에서 분당 몇 번 보낼 수 있는가.
+
+    TPM 과 RPM 중 먼저 걸리는 쪽을 돌려준다 (계획서 1.4 / 1.5절).
+    """
+    spec = get_model(model_id)
+    if context_budget <= 0:
+        return float(spec.limits.rpm)
+    by_tpm = max_request_tokens(model_id) / context_budget
+    return min(by_tpm, float(spec.limits.rpm))

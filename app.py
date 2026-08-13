@@ -43,7 +43,7 @@ st.selectbox(
 if not get_secret(SECRET_KEY_API):
     st.warning(
         f"`{SECRET_KEY_API}` 가 설정되어 있지 않습니다. "
-        "`.streamlit/secrets.toml` 에 API 키를 넣어야 세션 2부터의 응답 생성이 동작합니다. "
+        "`.streamlit/secrets.toml` 에 API 키를 넣어야 응답 생성이 동작합니다. "
         "지금은 화면 구성만 확인할 수 있습니다."
     )
 
