@@ -736,8 +736,8 @@ Streamlit 기반 개인용 AI 챗봇. Google Gemini API 사용.
 - secrets를 로그나 화면에 출력하지 않는다.
 
 ## 환경
-- Windows 11, Python 3.12, venv + pip (uv 미사용)
-- 작업 폴더: C:\Users\SAMSUNG\Documents\gchat
+- Windows 11, Python 3.12, 전역 pip (venv·uv 미사용 — 사용자 결정, 2026-08-13)
+- 작업 폴더: C:\Users\user\Documents\claude_code\gchat
 - 테스트: pytest / 린트: ruff / 타입: mypy
 
 ## v1 제외 (구현하지 말 것)
@@ -755,6 +755,12 @@ Streamlit 기반 개인용 AI 챗봇. Google Gemini API 사용.
 - localStorage/sessionStorage 사용
 - 서버 파일시스템에 대화 저장 (내보내기는 download_button만 사용)
 ```
+
+**실물과의 차이 (의도된 것)**
+
+실제 `CLAUDE.md`에는 위 내용에 더해 `## 진행 상황` 섹션이 있다.
+세션이 끝날 때마다 갱신되는 항목이므로 이 부록에는 옮기지 않는다.
+그 외의 내용은 실물과 일치하며, 어긋나면 실물이 아니라 이 부록을 먼저 고친다.
 
 ## 부록 B — 실측이 필요한 미확정 사항
 
