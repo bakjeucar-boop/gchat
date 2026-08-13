@@ -106,8 +106,21 @@ Gemma의 400 응답 본문:
 | `tool_use_prompt_token_count` | 관측 구간에서 항상 None |
 | `cached_content_token_count` | 관측 구간에서 항상 None |
 
-`quota.py`(세션 3)는 `None`을 0으로 다뤄야 한다. `total_token_count`가
-사고 토큰을 포함하므로 사후 보정은 total 하나만 쓰면 된다.
+`quota.py`(세션 3)는 `None`을 0으로 다뤄야 한다.
+
+**어느 필드를 어디에 쓰는가** (B절 결론 반영 — 이 절은 B절 실험 전에 쓰였다가
+정정됐다. 종전 문장 "사후 보정은 total 하나만 쓰면 된다"는 **틀렸다**.)
+
+| 용도 | 쓸 필드 |
+|---|---|
+| **TPM 슬라이딩 윈도우 기록** | **`prompt_token_count` 만** (서버 메트릭이 `input_token_count`) |
+| RPM / RPD | 요청 횟수 (토큰과 무관) |
+| 비용 표시 (계획서 2.8절) | `prompt_token_count` / `candidates_token_count` **분리**. 입·출력 단가가 다르므로 total 로는 계산할 수 없다 |
+| 화면 배지·로그 | `total_token_count` (참고 표시용) |
+
+`thoughts_token_count`는 TPM 에 넣지 않는다(실측 B-1 3단계). 다만 과금 관점에서는
+출력 쪽에 잡히므로, 비용 계산에서는 `candidates + thoughts`를 출력으로 보는 편이
+안전하다 — 단가 확정과 함께 세션 4 에서 결정한다.
 
 ---
 
