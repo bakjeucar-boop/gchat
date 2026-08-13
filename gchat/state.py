@@ -23,6 +23,7 @@ S_ACTIVE_CONVERSATION = "active_conversation_id"
 S_ACTIVE_MODEL = "active_model_id"  # 확정된 모델. 실제 API 호출에 쓰는 값
 S_UI_MODEL = "ui_model_id"  # selectbox 위젯 값. 확인 절차 중에는 확정값과 다를 수 있다
 S_PENDING_MODEL = "pending_model_id"  # 계열 전환 확인 대기 중인 대상 모델
+S_LAST_DELETED = "last_deleted_conversation"  # 되돌리기 버퍼 (계획서 2.4절)
 
 
 def now_kst() -> datetime:
@@ -40,6 +41,11 @@ class Message:
     out_tokens: int | None = None
     created_at: datetime = field(default_factory=now_kst)
     truncated_from_context: bool = False
+    # 계획서 2.4절 자료구조에는 없으나 2.8절(응답 지연 시간 표시)과
+    # 2.5절(내보내기 "· 3.2초")이 요구하므로 세션 4에서 추가했다.
+    latency_s: float | None = None
+    # 출력 한도로 잘렸는가 (계획서 2.8절 — "계속" 안내를 붙인다)
+    truncated_output: bool = False
 
 
 @dataclass
@@ -86,6 +92,36 @@ class Conversation:
         self.updated_at = now_kst()
 
 
+TITLE_LIMIT = 30
+DEFAULT_TITLE = "새 대화"
+
+
+def title_from_first_message(text: str, limit: int = TITLE_LIMIT) -> str:
+    """첫 사용자 메시지의 앞 30자로 제목을 만든다 (계획서 2.4절).
+
+    줄바꿈과 연속 공백은 한 칸으로 눌러 한 줄로 만든다.
+    """
+    collapsed = " ".join(text.split())
+    if not collapsed:
+        return DEFAULT_TITLE
+    if len(collapsed) <= limit:
+        return collapsed
+    return collapsed[:limit].rstrip() + "…"
+
+
+def sort_by_recent(items: list[Conversation]) -> list[Conversation]:
+    """사이드바는 최신순으로 보여준다 (계획서 2.4절)."""
+    return sorted(items, key=lambda conv: conv.updated_at, reverse=True)
+
+
+def remove_conversation(items: list[Conversation], conv_id: str) -> Conversation | None:
+    """목록에서 빼내 돌려준다. 없으면 None. (되돌리기용으로 보관한다)"""
+    for index, conv in enumerate(items):
+        if conv.id == conv_id:
+            return items.pop(index)
+    return None
+
+
 def new_conversation(model_id: str, *, inherit: Settings | None = None) -> Conversation:
     spec = get_model(model_id)
     return Conversation(
@@ -112,6 +148,8 @@ def init_session_state() -> None:
         st.session_state[S_CONVERSATIONS] = []
     if S_ACTIVE_CONVERSATION not in st.session_state:
         st.session_state[S_ACTIVE_CONVERSATION] = None
+    if S_LAST_DELETED not in st.session_state:
+        st.session_state[S_LAST_DELETED] = None
 
 
 def conversations() -> list[Conversation]:
@@ -174,6 +212,78 @@ def set_pending_model(model_id: str) -> None:
 
 def pending_model_id() -> str | None:
     return st.session_state.get(S_PENDING_MODEL)
+
+
+def ensure_conversation() -> Conversation:
+    """활성 대화를 보장한다. 없으면 현재 모델로 하나 만든다."""
+    conv = active_conversation()
+    if conv is None:
+        conv = add_conversation(new_conversation(active_model_id()))
+    return conv
+
+
+def start_conversation(model_id: str, *, inherit_from: Conversation | None = None) -> Conversation:
+    """새 대화를 시작한다. 직전 대화의 설정을 이어받는다 (계획서 2.1.1절)."""
+    return add_conversation(
+        new_conversation(model_id, inherit=inherit_from.settings if inherit_from else None)
+    )
+
+
+def append_message(conv: Conversation, message: Message) -> None:
+    """메시지를 붙이고 제목·수정 시각을 갱신한다."""
+    conv.messages.append(message)
+    if message.role == "user" and conv.title == DEFAULT_TITLE:
+        conv.title = title_from_first_message(message.content)
+    conv.touch()
+
+
+def recent_conversations() -> list[Conversation]:
+    return sort_by_recent(conversations())
+
+
+def delete_conversation(conv_id: str) -> Conversation | None:
+    """대화를 지우고 되돌리기 버퍼에 넣는다 (계획서 2.4절).
+
+    계획서는 "되돌리기 5초"지만 Streamlit 은 상호작용이 있어야 화면을 다시
+    그리므로, 세션 4 결정에 따라 **다음 조작까지** 되돌리기 버튼을 띄운다.
+    """
+    removed = remove_conversation(conversations(), conv_id)
+    if removed is None:
+        return None
+    st.session_state[S_LAST_DELETED] = removed
+    if st.session_state.get(S_ACTIVE_CONVERSATION) == conv_id:
+        remaining = recent_conversations()
+        st.session_state[S_ACTIVE_CONVERSATION] = remaining[0].id if remaining else None
+    return removed
+
+
+def restore_deleted() -> Conversation | None:
+    """되돌리기. 지운 대화를 목록에 되돌리고 활성화한다."""
+    removed = st.session_state.get(S_LAST_DELETED)
+    if removed is None:
+        return None
+    conversations().append(removed)
+    st.session_state[S_ACTIVE_CONVERSATION] = removed.id
+    st.session_state[S_LAST_DELETED] = None
+    return removed
+
+
+def deleted_conversation() -> Conversation | None:
+    return st.session_state.get(S_LAST_DELETED)
+
+
+def clear_deleted() -> None:
+    """다른 조작이 일어나면 되돌리기 기회를 거둔다 (세션 4 결정)."""
+    st.session_state[S_LAST_DELETED] = None
+
+
+def delete_all_conversations() -> int:
+    """일괄 삭제. 되돌리기를 제공하지 않는다 (계획서 2.4절)."""
+    count = len(conversations())
+    st.session_state[S_CONVERSATIONS] = []
+    st.session_state[S_ACTIVE_CONVERSATION] = None
+    st.session_state[S_LAST_DELETED] = None
+    return count
 
 
 def needs_family_confirmation(from_model_id: str, to_model_id: str) -> bool:
