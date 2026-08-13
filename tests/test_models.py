@@ -13,6 +13,7 @@ import pytest
 from gchat.models import (
     FAMILY_GEMINI3,
     FAMILY_GEMMA4,
+    GEMMA_DEFAULT_INSTRUCTION,
     MODELS,
     MODELS_BY_ID,
     SAFETY_MARGIN,
@@ -36,10 +37,11 @@ EXPECTED_LIMITS = {
 }
 
 # 계획서 1.4절 표 — (기본 컨텍스트 예산, 기본 최대 출력)
+# Gemma 는 세션 4 실사용 후 3,000·768 에서 상향됐다.
 EXPECTED_BUDGETS = {
     "gemini-3.5-flash-lite": (32_000, 4_096),
-    "gemma-4-31b-it": (3_000, 768),
-    "gemma-4-26b-a4b-it": (3_000, 768),
+    "gemma-4-31b-it": (9_000, 1_536),
+    "gemma-4-26b-a4b-it": (9_000, 1_536),
 }
 
 # 세션 2 실측 (models.get) — (context_window, max_output_tokens)
@@ -194,6 +196,25 @@ def test_파일_첨부는_gemini에서만_활성화된다():
 def test_모든_모델이_시스템_인스트럭션을_지원한다():
     """계획서 부록 B — Gemma 4 도 시스템 인스트럭션을 지원한다."""
     assert all(spec.supports_system_instruction for spec in MODELS)
+
+
+def test_Gemini는_기본_인스트럭션이_없다():
+    """자연 답변 길이가 적당해 개입하지 않는다 (계획서 2.6.2절)."""
+    assert get_model("gemini-3.5-flash-lite").default_system_instruction == ""
+
+
+@pytest.mark.parametrize("spec", models_in_family(FAMILY_GEMMA4), ids=lambda s: s.id)
+def test_Gemma는_간결하게_쓰라는_기본_인스트럭션을_갖는다(spec: ModelSpec):
+    """계획서 2.6.2절 — 자연 답변 약 3,000토큰을 줄이는 유일한 수단."""
+    instruction = spec.default_system_instruction
+    assert instruction
+    assert "2,000자" in instruction
+    assert instruction == GEMMA_DEFAULT_INSTRUCTION
+
+
+def test_기본_인스트럭션은_모델_테이블에만_있다():
+    """UI 가 값을 하드코딩하지 않도록 테이블이 단일 출처다 (CLAUDE.md 원칙)."""
+    assert all(isinstance(spec.default_system_instruction, str) for spec in MODELS)
 
 
 def test_요청당_토큰_상한은_TPM의_90퍼센트다():

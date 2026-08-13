@@ -93,7 +93,7 @@ def test_새_대화는_응답_모드와_시스템_인스트럭션을_이어받�
 def test_예산은_새_모델의_기본값으로_초기화된다():
     previous = Settings(thinking_level="minimal", context_budget=32_000)
     conv = new_conversation(GEMMA, inherit=previous)
-    assert conv.settings.context_budget == 3_000  # 계획서 1.4절
+    assert conv.settings.context_budget == 9_000  # 계획서 1.4절 (세션 4 이후 상향)
 
 
 def test_새_모델에_없는_응답_모드는_minimal로_되돌아간다():

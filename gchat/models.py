@@ -43,6 +43,9 @@ class ModelSpec:
     thinking_levels: tuple[str, ...]  # ("minimal","medium","high") | ("minimal","high")
     default_thinking_level: str  # 항상 "minimal"
     supports_system_instruction: bool
+    # 계획서 2.6.2절 — 모델별 기본 시스템 인스트럭션. 없으면 "".
+    # 숨겨서 몰래 덧붙이지 않는다. 컨트롤 바의 입력칸에 그대로 채워 보인다.
+    default_system_instruction: str
     supports_file_input: bool  # 계획서 2.9절 — v1 에서는 UI 게이팅용으로만 사용
     max_output_tokens: int  # 모델 상한
     context_window: int
@@ -56,6 +59,14 @@ class ModelSpec:
 
 
 # 사고 수준의 표시 라벨은 계열별로 다르다 (계획서 1.3절).
+# 계획서 2.6.2절 — Gemma 는 자연 답변이 약 3,000토큰으로 장황하다 (세션 4 실사용).
+# max_output_tokens 로는 줄일 수 없다. 그건 자르는 칼이지 짧게 쓰게 만드는 손잡이가
+# 아니다. 생성 길이 자체를 바꾸는 유일한 수단이 시스템 인스트럭션이다.
+GEMMA_DEFAULT_INSTRUCTION = (
+    "답변은 핵심만 간결하게 쓴다. 사용자가 길게 요청하지 않는 한 2,000자 이내로 "
+    "답한다. 불필요한 서론·요약·반복을 넣지 않는다."
+)
+
 THINKING_LABELS: dict[str, dict[str, str]] = {
     FAMILY_GEMINI3: {"minimal": "빠름", "medium": "보통", "high": "깊게"},
     FAMILY_GEMMA4: {"minimal": "사고 끄기", "high": "사고 켜기"},
@@ -71,6 +82,8 @@ MODELS: tuple[ModelSpec, ...] = (
         thinking_levels=("minimal", "medium", "high"),
         default_thinking_level="minimal",
         supports_system_instruction=True,
+        # 자연 답변이 약 1,000토큰으로 적당하다. 개입하지 않는다 (계획서 2.6.2절).
+        default_system_instruction="",
         supports_file_input=True,
         # 세션 2 실측 (models.get): input_token_limit / output_token_limit
         max_output_tokens=65_536,
@@ -89,18 +102,21 @@ MODELS: tuple[ModelSpec, ...] = (
         thinking_levels=("minimal", "high"),
         default_thinking_level="minimal",
         supports_system_instruction=True,
-        # Gemma 4 도 Files API 로 이미지 입력은 지원하지만, TPM 16,000 과 예산 3,000
-        # 아래에서는 첨부가 무의미하므로 계획서 2.9절 결정에 따라 게이팅한다.
+        default_system_instruction=GEMMA_DEFAULT_INSTRUCTION,
+        # Gemma 4 도 Files API 로 이미지 입력은 지원하지만, TPM 16,000 아래에서는
+        # 첨부가 무의미하므로 계획서 2.9절 결정에 따라 게이팅한다.
         supports_file_input=False,
         # 세션 2 실측 — 컨텍스트 256K, 최대 출력 32,768 (문서의 1M 설은 사실이 아니다)
         max_output_tokens=32_768,
         context_window=262_144,
         limits=RateLimits(rpm=30, tpm=16_000, rpd=14_400),
-        default_context_budget=3_000,
-        # 실측 결정: 사고/출력은 TPM 을 쓰지 않으므로 대기 시간과 무관하지만,
-        # 긴 응답은 다음 턴의 입력이 되어 예산 3,000 을 한두 턴에 채운다.
-        # 계획서 1.4절의 "약 5턴"을 실제로 지키려고 768 로 묶는다.
-        default_max_output=768,
+        # 세션 4 실사용으로 3,000 → 9,000 상향 (계획서 1.4·1.5절).
+        # TPM 은 실제로 걸리지 않았다 — 6턴 내내 대기 0회, 창 사용률 29%.
+        # 예산 9,000 의 TPM상 최소 간격 37.5초 < 출력 1,536 의 생성 시간 약 50초.
+        default_context_budget=9_000,
+        # 768 → 1,536. 이제 일상적 상한이 아니라 안전장치다. 길이를 실제로 줄이는
+        # 것은 default_system_instruction 이다 (계획서 2.6.2절).
+        default_max_output=1_536,
         price_in_per_mtok=None,
         price_out_per_mtok=None,
     ),
@@ -112,13 +128,14 @@ MODELS: tuple[ModelSpec, ...] = (
         thinking_levels=("minimal", "high"),
         default_thinking_level="minimal",
         supports_system_instruction=True,
+        default_system_instruction=GEMMA_DEFAULT_INSTRUCTION,
         supports_file_input=False,
         # 세션 2 실측 — 31B 와 동일
         max_output_tokens=32_768,
         context_window=262_144,
         limits=RateLimits(rpm=30, tpm=16_000, rpd=14_400),
-        default_context_budget=3_000,
-        default_max_output=768,
+        default_context_budget=9_000,
+        default_max_output=1_536,
         price_in_per_mtok=None,
         price_out_per_mtok=None,
     ),
