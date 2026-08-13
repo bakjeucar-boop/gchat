@@ -38,6 +38,16 @@ class FakeClock:
 
 
 @dataclass
+class FakeUsage:
+    """client.Usage 와 같은 모양. TPM 에 들어가야 하는 것은 input_tokens 뿐이다."""
+
+    input_tokens: int = 1_200
+    output_tokens: int = 5_000
+    thoughts_tokens: int = 700
+    total_tokens: int = 6_900
+
+
+@dataclass
 class FakeRateLimited:
     """client.RateLimited 와 같은 모양 (quota 는 client 를 import 하지 않는다)."""
 
@@ -280,14 +290,6 @@ def test_usage_객체에서_입력_토큰만_뽑는다(clock: FakeClock):
     출력 5,000 · 사고 700 이 섞여 들어가면 total 6,900 으로 창이 부풀어
     멀쩡한 요청을 막는다. 필드 선택을 quota 쪽에 두어 구조적으로 막는다.
     """
-
-    @dataclass
-    class FakeUsage:
-        input_tokens: int = 1_200
-        output_tokens: int = 5_000
-        thoughts_tokens: int = 700
-        total_tokens: int = 6_900
-
     tracker = QuotaTracker(GEMMA, clock)
     tracker.record_sent(1_000)
     tracker.record_usage_from(FakeUsage())
@@ -306,6 +308,59 @@ def test_client의_Usage와_모양이_맞는다(clock: FakeClock):
     tracker.record_sent(999)
     tracker.record_usage_from(usage)
     assert tracker.gauges().input_tokens_in_window == 800
+
+
+def test_창의_기준_시각은_전송_시각이지_응답_시각이_아니다(clock: FakeClock):
+    """Gemma 는 긴 응답 하나에 45초가 걸린다 (세션 2 실측).
+
+    응답이 끝난 시각으로 기록하면 창이 45초 밀려, 이미 풀린 요청을 계속 막는다.
+    예외도 안 나고 화면도 멀쩡한데 그냥 느려지는 결함이다.
+    """
+    tracker = QuotaTracker(GEMMA, clock)
+    entry = tracker.record_sent(14_000)  # t=0 에 전송
+    clock.advance(45)  # 스트리밍에 45초
+    tracker.record_usage_from(FakeUsage(input_tokens=14_000), entry)
+
+    # t=45. 전송 시각 기준이면 15초 뒤 만료된다.
+    assert tracker.next_wait_s(1_000) == pytest.approx(15.0)
+
+    clock.advance(15)  # t=60 — 전송 후 60초
+    assert tracker.precheck(1_000).kind is VerdictKind.OK
+
+
+def test_보정이_늦어도_창이_밀리지_않는다(clock: FakeClock):
+    """보정은 값만 갱신한다. 시각은 record_sent 시점 그대로여야 한다."""
+    tracker = QuotaTracker(GEMMA, clock)
+    entry = tracker.record_sent(1_000)
+    clock.advance(50)
+    tracker.record_usage_from(FakeUsage(input_tokens=9_999), entry)
+
+    assert tracker.gauges().input_tokens_in_window == 9_999
+    clock.advance(11)  # 전송 후 61초
+    assert tracker.gauges().input_tokens_in_window == 0  # 시각이 밀렸다면 남아 있다
+
+
+def test_스트림이_창보다_길면_보정을_버린다(clock: FakeClock):
+    """60초를 넘긴 스트림의 기록은 이미 만료됐다.
+
+    핸들 없이 마지막 기록을 덮어쓰면 그 사이 들어온 다른 요청을 부풀린다.
+    """
+    tracker = QuotaTracker(GEMMA, clock)
+    old = tracker.record_sent(1_000)  # t=0
+    clock.advance(70)  # 스트림이 70초 걸렸다 — 이 기록은 만료
+    fresh = tracker.record_sent(500)  # t=70 에 다른 요청
+    tracker.record_usage_from(FakeUsage(input_tokens=13_000), old)  # 뒤늦은 보정
+
+    assert tracker.gauges().input_tokens_in_window == 500  # 새 기록은 그대로다
+    assert fresh.tokens == 500
+
+
+def test_핸들을_안_넘기면_마지막_기록을_보정한다(clock: FakeClock):
+    """단일 요청 흐름에서는 핸들 없이도 동작한다 (기존 호출부 호환)."""
+    tracker = QuotaTracker(GEMMA, clock)
+    tracker.record_sent(1_000)
+    tracker.record_usage(1_234)
+    assert tracker.gauges().input_tokens_in_window == 1_234
 
 
 def test_usage가_None이면_0으로_다룬다(clock: FakeClock):

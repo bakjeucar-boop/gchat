@@ -85,6 +85,17 @@ class Verdict:
 
 
 @dataclass
+class _Entry:
+    """창에 쌓이는 기록 하나. `at` 은 **요청을 보낸 시각**이며 이후 바뀌지 않는다.
+
+    record_sent() 가 이 객체를 돌려주고, 보정은 값(tokens)만 갱신한다.
+    """
+
+    at: datetime
+    tokens: int
+
+
+@dataclass
 class Gauges:
     """사이드바 진행바용 (계획서 2.3절)."""
 
@@ -121,7 +132,7 @@ class QuotaTracker:
         self._margin = margin
         self._requests: deque[datetime] = deque()
         # (시각, 입력 토큰). 입력만 넣는다 — TPM 은 입력 전용이다.
-        self._tokens: deque[list] = deque()
+        self._tokens: deque[_Entry] = deque()
         self._daily_requests = 0
         self._daily_reset_at = next_pacific_midnight(clock())
         self._blocked_until: datetime | None = None
@@ -151,7 +162,7 @@ class QuotaTracker:
         edge = now - WINDOW
         while self._requests and self._requests[0] <= edge:
             self._requests.popleft()
-        while self._tokens and self._tokens[0][0] <= edge:
+        while self._tokens and self._tokens[0].at <= edge:
             self._tokens.popleft()
         if now >= self._daily_reset_at:
             self._daily_requests = 0
@@ -161,37 +172,56 @@ class QuotaTracker:
             self._server_wait_unknown = False
 
     def _tokens_in_window(self) -> int:
-        return sum(entry[1] for entry in self._tokens)
+        return sum(entry.tokens for entry in self._tokens)
 
     # --- 기록 -------------------------------------------------------------
 
-    def record_sent(self, estimated_input_tokens: int) -> None:
-        """요청을 보낸 직후 호출한다. 추정 입력 토큰으로 창을 채운다."""
+    def record_sent(self, estimated_input_tokens: int) -> _Entry:
+        """**요청을 보내기 직전**에 호출한다. 이 시각이 창의 기준이 된다.
+
+        서버는 요청을 받은 시각에 입력 토큰을 센다. 스트림이 끝난 뒤의 시각으로
+        기록하면 창이 통째로 밀린다 — Gemma 는 긴 응답 하나에 45초가 걸리므로
+        (세션 2 실측) 이미 풀린 요청을 45초 더 막게 된다. 예외도 안 나고 화면도
+        멀쩡한데 그냥 느려지는 종류의 결함이라 눈에 띄지 않는다.
+
+        돌려주는 핸들을 record_usage_from() 에 넘기면, 보정이 **이 시각의 기록**을
+        찾아가므로 호출 시점이 늦어도 창이 밀리지 않는다.
+        """
         now = self._clock()
         self._prune(now)
+        entry = _Entry(at=now, tokens=max(0, estimated_input_tokens))
         self._requests.append(now)
-        self._tokens.append([now, max(0, estimated_input_tokens)])
+        self._tokens.append(entry)
         self._daily_requests += 1
+        return entry
 
-    def record_usage(self, prompt_token_count: int | None) -> None:
-        """응답 후 실제 입력 토큰으로 보정한다 (계획서 2.3절).
+    def record_usage(self, prompt_token_count: int | None, entry: _Entry | None = None) -> None:
+        """응답 후 실제 입력 토큰으로 추정치를 보정한다 (계획서 2.3절).
 
         `prompt_token_count` 만 받는다. 출력·사고 토큰을 여기에 넣으면 안 된다.
         필드가 None 으로 오는 경우가 실재하므로 0 으로 다룬다 (세션 2 A-6).
         가능하면 record_usage_from() 을 써서 필드 선택 자체를 이쪽에 맡길 것.
-        """
-        if not self._tokens:
-            return
-        self._tokens[-1][1] = max(0, prompt_token_count or 0)
 
-    def record_usage_from(self, usage: UsageLike) -> None:
+        `entry` 는 record_sent() 가 돌려준 핸들이다. 값만 갱신하고 **시각은
+        건드리지 않는다.** 창의 기준은 언제나 전송 시각이다.
+        스트림이 60초를 넘겨 그 기록이 이미 창에서 빠졌다면 아무것도 하지 않는다
+        (핸들 없이 마지막 기록을 덮어쓰면 엉뚱한 요청을 부풀린다).
+        """
+        target = entry if entry is not None else (self._tokens[-1] if self._tokens else None)
+        if target is None:
+            return
+        if not any(item is target for item in self._tokens):
+            return  # 이미 창에서 만료된 기록이다
+        target.tokens = max(0, prompt_token_count or 0)
+
+    def record_usage_from(self, usage: UsageLike, entry: _Entry | None = None) -> None:
         """응답의 usage 객체에서 **입력 토큰만** 뽑아 기록한다.
 
         호출자가 total_token_count 를 넘기는 실수를 구조적으로 막는다.
         그 실수는 예외도 안 나고 화면도 멀쩡한데 추적기만 부풀어
         멀쩡한 요청을 막는 종류라 눈에 띄지 않는다.
         """
-        self.record_usage(getattr(usage, "input_tokens", None))
+        self.record_usage(getattr(usage, "input_tokens", None), entry)
 
     def apply_rate_limit(self, info: RateLimitInfo) -> None:
         """서버 429 로 추적기를 보정한다. 서버가 최종 진실이다.
@@ -287,10 +317,10 @@ class QuotaTracker:
         if used + estimated > self.allowed_tpm:
             need = used + estimated - self.allowed_tpm
             freed = 0
-            for stamp, tokens in self._tokens:
-                freed += tokens
+            for entry in self._tokens:
+                freed += entry.tokens
                 if freed >= need:
-                    waits.append((stamp + WINDOW - now).total_seconds())
+                    waits.append((entry.at + WINDOW - now).total_seconds())
                     break
             else:
                 # 창을 다 비워도 모자란다. TOO_LARGE 가 먼저 걸러내므로 여기 오지 않는다.
