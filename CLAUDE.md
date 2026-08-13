@@ -11,14 +11,14 @@ Streamlit 기반 개인용 AI 챗봇. Google Gemini API 사용.
 - 오류를 조용히 삼키지 않는다. 무엇이 왜 실패했는지 사용자에게 보인다.
 - 한도 추적기는 추정치이고 서버 429가 최종 진실이다. 둘이 어긋나는 경우를
   정상 동작으로 간주해 처리한다.
-- TPM은 입력 토큰만 센다 (세션 2 실측). TPM 추적에는 `prompt_token_count`만 쓰고,
-  `total_token_count`는 비용·표시용으로만 쓴다.
 - Gemma에는 모든 요청에 `thinking_config`를 명시적으로 보낸다. 생략하면
   사고 모드로 동작해 TPM은 아니지만 출력 예산을 갉아먹는다 (세션 2 A-4).
+- TPM은 입력 토큰만 센다 (세션 2 실측). TPM 추적에는 `prompt_token_count`만 쓰고,
+  `total_token_count`는 비용·표시용으로만 쓴다.
 - secrets를 로그나 화면에 출력하지 않는다.
 
 ## 환경
-- Windows 11, Python 3.12, 전역 pip (venv·uv 미사용 — 사용자 결정, 2026-08-13)
+- Windows 11, Python 3.12, 전역 pip 설치 (venv·uv 미사용 — 세션 1에서 확정)
 - 작업 폴더: C:\Users\user\Documents\claude_code\gchat
 - 테스트: pytest / 린트: ruff / 타입: mypy
 
@@ -27,8 +27,8 @@ Streamlit 기반 개인용 AI 챗봇. Google Gemini API 사용.
 - 최대 출력 토큰 UI. 모델별 고정 상수이며 TPM 계산용으로만 쓴다
 - 대화 영구 저장 (DB, 파일 저장). 대화는 session_state에만 존재한다
 - 파일 첨부 (2.9절 참고만)
-- 웹 검색 그라운딩 (2.10절). 현재 키 등급에서 429로 막힌다. `tools` 파라미터를
-  아예 쓰지 않는다
+- 웹 검색 그라운딩 (2.10절 — 무료 티어 API 자체가 차단, 세션 2 실측 확정).
+  `tools` 파라미터를 아예 쓰지 않는다
 - Google OIDC 로그인
 - 컨텍스트 요약 압축
 
