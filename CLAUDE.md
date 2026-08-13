@@ -45,8 +45,15 @@ Streamlit 기반 개인용 AI 챗봇. Google Gemini API 사용.
   `models.py` 실측 반영, 계획서 1.4·1.5·2.10절 갱신, `client.py`
 - 세션 3 완료: `quota.py`(QuotaTracker·QuotaBook·429 보정) + `context.py`
   (토큰 추정·경계 실호출·예산 절단). 가짜 시계 테스트 150건
-- 다음: 세션 4 — `ui/chat.py`, `ui/sidebar.py`. 아래 순서로 엮는다
-  `context.fit_to_budget` → `quota.precheck` → `client.stream` →
-  `quota.record_usage_from`
+- 세션 4 완료: `ui/chat.py` + `ui/sidebar.py` + `app.py` 배선. 앱이 실제로
+  대화한다. 배선 순서는 `fit_to_budget` → `precheck` → `record_sent` →
+  `stream` → `record_usage_from(entry)`
+- 다음: 세션 5 — `ui/controls.py` 컨트롤 바(모델·응답 모드·예산 슬라이더·
+  시스템 인스트럭션), 한도 게이지 진행바, 계열 전환 3버튼 확인,
+  입력창 위 대기 예고
+- 세션 4 결정: 되돌리기는 "5초" 대신 **다음 조작까지** 유지(Streamlit 은
+  상호작용 없이 다시 그리지 않는다). 계열 전환은 확인 절차 없이 자동 새 대화
 - 남은 미해결: RPD 리셋 시각(부록 B "열려 있는 사항" 1),
-  가격 필드(수동 입력 필요), Gemma 실제 턴 수(세션 4 실사용에서 확인)
+  가격 필드(수동 입력 필요)
+- 세션 4 실측으로 해소: Gemma 턴당 증가 782~786 토큰, 예산 3,000 에서 4턴.
+  계획서 1.5절 추정과 일치 (`docs/api_findings.md` B-7)
