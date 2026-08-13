@@ -108,6 +108,38 @@ class TrimResult:
         return self.trimmed > 0
 
 
+def _select_within_budget(
+    ordered: list[Message],
+    available: int,
+    measure: Callable[[list[Message]], tuple[int, bool]],
+) -> tuple[list[Message], int, bool]:
+    """예산에 들어갈 때까지 앞에서부터 user/model 쌍을 뺀다. 상태를 바꾸지 않는다."""
+    kept = ordered[:]
+    tokens, exact = measure(kept)
+    while tokens > available and len(kept) > 1:
+        # 모델 답이 없으면 하나만 뺀다.
+        drop = 2 if len(kept) > 2 and kept[1].role == "model" else 1
+        kept = kept[drop:]
+        tokens, exact = measure(kept)
+    return kept, tokens, exact
+
+
+def count_excluded(
+    messages: Sequence[Message], budget: int, *, system_instruction: str = ""
+) -> int:
+    """이 예산이면 몇 개가 컨텍스트에서 빠지는지만 센다 (계획서 2.6.1절 사전 안내).
+
+    슬라이더를 움직일 때마다 부르므로 절단을 실제로 적용하지 않고
+    count_tokens 도 호출하지 않는다. 추정만 쓴다.
+    """
+    ordered = list(messages)
+    available = max(0, budget - estimate_tokens(system_instruction))
+    kept, _, _ = _select_within_budget(
+        ordered, available, lambda items: (estimate_messages(items), False)
+    )
+    return len(ordered) - len(kept)
+
+
 def fit_to_budget(
     messages: Sequence[Message],
     budget: int,
@@ -129,7 +161,6 @@ def fit_to_budget(
         message.truncated_from_context = False
 
     available = max(0, budget - estimate_tokens(system_instruction))
-    kept = ordered[:]
 
     def measure(items: list[Message]) -> tuple[int, bool]:
         estimate = estimate_messages(items)
@@ -137,13 +168,7 @@ def fit_to_budget(
             return count_exact(items), True
         return estimate, False
 
-    tokens, exact = measure(kept)
-    while tokens > available and len(kept) > 1:
-        # user/model 쌍 단위로 앞에서부터 뺀다. 모델 답이 없으면 하나만 뺀다.
-        drop = 2 if len(kept) > 2 and kept[1].role == "model" else 1
-        kept = kept[drop:]
-        tokens, exact = measure(kept)
-
+    kept, tokens, exact = _select_within_budget(ordered, available, measure)
     trimmed_messages = ordered[: len(ordered) - len(kept)]
     for message in trimmed_messages:
         message.truncated_from_context = True

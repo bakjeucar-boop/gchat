@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from gchat.models import GEMMA_DEFAULT_INSTRUCTION
 from gchat.state import (
     DEFAULT_TITLE,
     TITLE_LIMIT,
     Message,
     Settings,
+    adopt_model,
     new_conversation,
     remove_conversation,
     sort_by_recent,
@@ -81,13 +83,75 @@ def test_없는_대화를_지우면_None():
 # --- 새 대화의 설정 승계 (계획서 2.1.1절) --------------------------------------------
 
 
-def test_새_대화는_응답_모드와_시스템_인스트럭션을_이어받는다():
-    previous = Settings(
-        thinking_level="high", context_budget=32_000, system_instruction="3문장 이내로"
-    )
+def test_새_대화는_응답_모드를_이어받는다():
+    previous = Settings(thinking_level="high", context_budget=32_000)
     conv = new_conversation(GEMINI, inherit=previous)
     assert conv.settings.thinking_level == "high"
+
+
+def test_사용자가_편집한_인스트럭션은_이어받는다():
+    """계획서 2.6.2절 — 편집한 적이 있으면 모델을 바꿔도 덮어쓰지 않는다."""
+    previous = Settings(
+        thinking_level="minimal",
+        context_budget=32_000,
+        system_instruction="3문장 이내로",
+        system_instruction_customized=True,
+    )
+    conv = new_conversation(GEMMA, inherit=previous)
     assert conv.settings.system_instruction == "3문장 이내로"
+    assert conv.settings.system_instruction_customized is True
+
+
+def test_편집한_적이_없으면_새_모델의_기본값을_채운다():
+    """계획서 2.6.2절 — Gemini(빈 값) → Gemma(간결 지시)."""
+    previous = Settings(thinking_level="minimal", context_budget=32_000)
+    conv = new_conversation(GEMMA, inherit=previous)
+    assert conv.settings.system_instruction == GEMMA_DEFAULT_INSTRUCTION
+    assert conv.settings.system_instruction_customized is False
+
+    # 반대 방향 — Gemma(간결 지시) → Gemini(빈 값)
+    back = new_conversation(GEMINI, inherit=conv.settings)
+    assert back.settings.system_instruction == ""
+
+
+def test_새_대화는_모델_기본_인스트럭션으로_시작한다():
+    assert new_conversation(GEMINI).settings.system_instruction == ""
+    assert new_conversation(GEMMA).settings.system_instruction == GEMMA_DEFAULT_INSTRUCTION
+
+
+# --- 계열 내 모델 전환 (계획서 2.6.1절) ---------------------------------------------
+
+
+def test_계열_내_전환은_지원하지_않는_응답_모드를_되돌린다():
+    settings = Settings(thinking_level="medium", context_budget=9_000)
+    notes = adopt_model(settings, GEMMA)
+    assert settings.thinking_level == "minimal"
+    assert notes and "되돌렸습니다" in notes[0]
+
+
+def test_계열_내_전환은_예산을_건드리지_않는다():
+    """이력을 유지하므로 절단이 생기면 안 된다 (계획서 2.6.1절)."""
+    settings = Settings(thinking_level="minimal", context_budget=5_000)
+    adopt_model(settings, GEMMA)
+    assert settings.context_budget == 5_000
+
+
+def test_전환_시_편집하지_않은_인스트럭션은_새_모델_기본값이_된다():
+    settings = Settings(thinking_level="minimal", context_budget=32_000, system_instruction="")
+    notes = adopt_model(settings, GEMMA)
+    assert settings.system_instruction == GEMMA_DEFAULT_INSTRUCTION
+    assert any("기본값" in note for note in notes)
+
+
+def test_전환_시_편집한_인스트럭션은_유지된다():
+    settings = Settings(
+        thinking_level="minimal",
+        context_budget=32_000,
+        system_instruction="내 지시",
+        system_instruction_customized=True,
+    )
+    adopt_model(settings, GEMMA)
+    assert settings.system_instruction == "내 지시"
 
 
 def test_예산은_새_모델의_기본값으로_초기화된다():

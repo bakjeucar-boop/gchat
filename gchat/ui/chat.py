@@ -26,18 +26,20 @@ from gchat.client import (
     StreamResult,
 )
 from gchat.context import fit_to_budget, single_input_too_large, too_large_message
-from gchat.models import default_model, thinking_label
+from gchat.models import default_model
 from gchat.quota import QuotaBook, Verdict, VerdictKind
 from gchat.state import Conversation, Message
 
 S_AUTOSEND = "chat_autosend"
 
 
-def render(client: GeminiClient | None, book: QuotaBook) -> None:
-    conv = state.ensure_conversation()
+def render_history(conv: Conversation) -> None:
+    """지난 메시지를 그린다. 컨트롤 바가 이 아래·입력창 위에 놓인다."""
     _render_header(conv)
     _render_messages(conv)
 
+
+def render_input(client: GeminiClient | None, book: QuotaBook, conv: Conversation) -> None:
     if client is None:
         st.chat_input("API 키가 없어 전송할 수 없습니다", disabled=True)
         return
@@ -59,12 +61,14 @@ def _awaiting_reply(conv: Conversation) -> bool:
 
 
 def _render_header(conv: Conversation) -> None:
-    spec = state.active_model()
-    st.caption(
-        f"{conv.title} · {spec.label} · "
-        f"{thinking_label(spec.id, conv.settings.thinking_level)} · "
-        f"컨텍스트 예산 {conv.settings.context_budget:,}"
-    )
+    """대화 제목과, 설정되어 있으면 시스템 인스트럭션 한 줄 요약 (계획서 2.6.2절)."""
+    st.caption(conv.title)
+    instruction = conv.settings.system_instruction.strip()
+    if instruction:
+        summary = " ".join(instruction.split())
+        if len(summary) > 60:
+            summary = summary[:60] + "…"
+        st.caption(f"🧭 {summary}")
 
 
 def _render_messages(conv: Conversation) -> None:
@@ -125,7 +129,7 @@ def _send(conv: Conversation, client: GeminiClient, book: QuotaBook) -> None:
         return
     if not auto:
         # 사용자가 "다시 시도" 를 누르지 않았고 새 입력도 아니면 기다린다.
-        st.caption(f"이번 요청은 약 {trim.tokens:,} 토큰을 사용합니다 · 대기 없이 전송 가능")
+        # 대기 예고는 컨트롤 바가 맡고, 0일 때는 아무것도 띄우지 않는다 (계획서 2.3절).
         _retry_button(conv, label="지금 보내기")
         return
 

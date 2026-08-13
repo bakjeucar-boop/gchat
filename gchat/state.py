@@ -12,7 +12,13 @@ from datetime import datetime, timedelta, timezone
 
 import streamlit as st
 
-from gchat.models import ModelSpec, default_model, get_model, resolve_thinking_level
+from gchat.models import (
+    ModelSpec,
+    default_model,
+    get_model,
+    resolve_thinking_level,
+    thinking_label,
+)
 
 KST = timezone(timedelta(hours=9))
 
@@ -59,21 +65,56 @@ class Settings:
     thinking_level: str
     context_budget: int
     system_instruction: str = ""
+    # 사용자가 인스트럭션을 직접 손댄 적이 있는가 (계획서 2.6.2절).
+    # True 면 모델을 바꿔도 모델 기본값으로 덮어쓰지 않는다.
+    system_instruction_customized: bool = False
 
     @classmethod
     def for_model(cls, spec: ModelSpec, *, inherit: Settings | None = None) -> Settings:
         """모델 기본값으로 설정을 만든다.
 
-        계획서 2.1.1절: 새 대화는 직전 대화의 응답 모드와 시스템 인스트럭션을
-        이어받되, 컨텍스트 예산은 새 모델의 기본값으로 초기화한다. 응답 모드가
-        새 모델에 없는 값이면 minimal 로 되돌린다.
+        계획서 2.1.1절: 새 대화는 직전 대화의 응답 모드를 이어받되, 컨텍스트
+        예산은 새 모델의 기본값으로 초기화한다. 응답 모드가 새 모델에 없는
+        값이면 minimal 로 되돌린다.
+        계획서 2.6.2절: 시스템 인스트럭션은 사용자가 편집한 값이 있으면 그것을
+        이어받고, 없으면 새 모델의 기본값을 채운다.
         """
         level = inherit.thinking_level if inherit else spec.default_thinking_level
+        customized = bool(inherit and inherit.system_instruction_customized)
+        instruction = (
+            inherit.system_instruction
+            if customized and inherit
+            else spec.default_system_instruction
+        )
         return cls(
             thinking_level=resolve_thinking_level(spec.id, level),
             context_budget=spec.default_context_budget,
-            system_instruction=inherit.system_instruction if inherit else "",
+            system_instruction=instruction,
+            system_instruction_customized=customized,
         )
+
+
+def adopt_model(settings: Settings, model_id: str) -> list[str]:
+    """계열 내 모델 전환에 맞춰 설정을 손본다 (계획서 2.6.1절 동작 규칙).
+
+    이력은 유지하므로 예산은 건드리지 않는다. 바뀐 사실을 알릴 문구를 돌려준다.
+    """
+    spec = get_model(model_id)
+    notes: list[str] = []
+
+    resolved = resolve_thinking_level(model_id, settings.thinking_level)
+    if resolved != settings.thinking_level:
+        notes.append(
+            f"'{settings.thinking_level}' 응답 모드는 {spec.label}에 없어 "
+            f"'{thinking_label(model_id, resolved)}'로 되돌렸습니다."
+        )
+        settings.thinking_level = resolved
+
+    if not settings.system_instruction_customized:
+        if settings.system_instruction != spec.default_system_instruction:
+            settings.system_instruction = spec.default_system_instruction
+            notes.append(f"시스템 인스트럭션을 {spec.label}의 기본값으로 바꿨습니다.")
+    return notes
 
 
 @dataclass

@@ -1,7 +1,7 @@
 """사이드바 — 휘발성 경고, 대화 목록, 삭제, 한도 표시 (계획서 2.4 / 2.6.3절).
 
 설정 항목은 사이드바에 두지 않는다 (계획서 2.6.3절).
-한도 게이지의 시각적 완성은 세션 5이므로 여기서는 숫자만 보여준다.
+한도는 진행바 3종으로 보이고, Gemma 에서는 TPM 을 맨 위에 둔다 (계획서 2.3절).
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import streamlit as st
 
 from gchat import state
-from gchat.models import get_model
+from gchat.models import FAMILY_GEMMA4, get_model
 from gchat.quota import QuotaBook
 
 VOLATILE_WARNING = (
@@ -102,15 +102,47 @@ def _render_bulk_delete() -> None:
             st.rerun()
 
 
+def _ratio(used: int, limit: int) -> float:
+    if limit <= 0:
+        return 0.0
+    return min(1.0, used / limit)
+
+
+def _compact(value: int) -> str:
+    return f"{value / 1000:.0f}K" if value >= 10_000 else f"{value:,}"
+
+
 def _render_quota(book: QuotaBook) -> None:
-    """한도 잔여량 (계획서 2.3절). 진행바와 배치는 세션 5에서 다듬는다."""
+    """한도 잔여량 진행바 3종 (계획서 2.3절).
+
+    Gemma 에서는 TPM 게이지를 가장 위에 두고 라벨을 강조한다. Streamlit 진행바는
+    높이를 바꿀 수 없어 "가장 크게"는 순서와 강조로만 표현한다.
+    """
     spec = state.active_model()
     gauges = book.tracker(spec.id).gauges()
     st.subheader("한도", divider="gray")
     st.caption(spec.label)
-    st.text(
-        f"분당 요청  {gauges.requests_in_window} / {gauges.rpm_limit}\n"
-        f"분당 토큰  {gauges.input_tokens_in_window:,} / {gauges.tpm_limit:,}\n"
-        f"일일 요청  {gauges.daily_requests} / {gauges.rpd_limit:,}"
+
+    tpm_label = (
+        f"**분당 토큰** {_compact(gauges.input_tokens_in_window)} / {_compact(gauges.tpm_limit)}"
+        if spec.family == FAMILY_GEMMA4
+        else f"분당 토큰 {_compact(gauges.input_tokens_in_window)} / {_compact(gauges.tpm_limit)}"
     )
-    st.caption("분당 토큰은 입력만 셉니다 (계획서 1.4절).")
+    rpm_label = f"분당 요청 {gauges.requests_in_window} / {gauges.rpm_limit}"
+    rpd_label = f"일일 요청 {gauges.daily_requests:,} / {gauges.rpd_limit:,}"
+
+    bars = [
+        (tpm_label, _ratio(gauges.input_tokens_in_window, gauges.tpm_limit)),
+        (rpm_label, _ratio(gauges.requests_in_window, gauges.rpm_limit)),
+        (rpd_label, _ratio(gauges.daily_requests, gauges.rpd_limit)),
+    ]
+    if spec.family != FAMILY_GEMMA4:
+        # Gemini 는 TPM 이 병목이 아니므로 요청 게이지를 위에 둔다.
+        bars = [bars[1], bars[0], bars[2]]
+
+    for label, value in bars:
+        st.progress(value, text=label)
+
+    st.caption(
+        "분당 토큰은 입력만 셉니다 (계획서 1.4절). 이 값은 추정치이고 서버 429가 최종 진실입니다."
+    )
