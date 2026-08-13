@@ -1,0 +1,404 @@
+# API 실측 결과 (세션 2)
+
+측정일: 2026-08-13 (KST)
+측정 도구: `scripts/probe_models.py`
+SDK: `google-genai` 1.65.0 / Python 3.12.10
+API 키 등급: **무료 티어** (billing 미연결로 추정 — C절 근거)
+
+계획서 부록 B의 항목 번호를 그대로 따른다. 이 문서는 관측 기록이고,
+확정 반영은 `gchat/models.py`와 계획서 갱신으로 별도 진행한다.
+
+---
+
+## A. 모델 스펙과 한도
+
+### A-1. 3개 모델 모두 실재하며 호출 가능하다
+
+`client.models.list()`가 52개 모델을 반환했고 계획서 1.1절의 3개 ID가 모두 있다.
+
+| 모델 ID | display_name | version | input_token_limit | output_token_limit | supported_actions |
+|---|---|---|---|---|---|
+| `gemini-3.5-flash-lite` | Gemini 3.5 Flash Lite | 3.5-flash-lite-07-2026 | 1,048,576 | 65,536 | generateContent, countTokens, createCachedContent, batchGenerateContent |
+| `gemma-4-31b-it` | Gemma 4 31B IT | 001 | 262,144 | 32,768 | generateContent, countTokens |
+| `gemma-4-26b-a4b-it` | Gemma 4 26B A4B IT | 001 | 262,144 | 32,768 | generateContent, countTokens |
+
+**부록 B-5 해소** — Gemma 4의 컨텍스트 윈도우는 **256K(262,144)**이고
+최대 출력은 **32,768**이다. 문서마다 256K/1M로 갈리던 건이 256K로 확정됐다.
+Gemma는 `createCachedContent`를 지원하지 않는다 (v1에서 쓰지 않으므로 영향 없음).
+
+세션 1의 잠정값과 비교하면 `context_window`는 3개 모두 맞았고,
+`max_output_tokens`는 Gemma에서 8,192로 낮게 잡았던 것이 실제 32,768이다.
+
+### A-2. count_tokens는 Gemma에서도 동작한다 (부록 B-7 해소)
+
+| 입력 | 문자 수 | 토큰 수 (3개 모델 동일) | 문자/토큰 |
+|---|---|---|---|
+| 한국어 예문 | 39 | 23 | **1.70** |
+| 영어 예문 | 69 | 19 | **3.63** |
+
+세 모델이 같은 토크나이저 결과를 냈다. 계획서 2.2절의 추정 상수
+(한국어 1.5자/토큰, 영어 4자/토큰)와 비교하면 한국어는 실제가 1.7,
+영어는 3.63이다. **계획서 값이 한국어는 보수적(토큰을 과대 추정),
+영어는 낙관적(과소 추정)** 이다. 2.2절 상수 조정 제안은 아래 D절 참조.
+
+### A-3. 스트리밍은 3개 모델 모두 동작한다 (부록 B-6 해소)
+
+`generate_content_stream` 정상. 짧은 프롬프트("1+1은?", max_output 50) 기준:
+
+| 모델 | 청크 수 | 소요 | finish_reason | 비고 |
+|---|---|---|---|---|
+| gemini-3.5-flash-lite | 2 | 0.88s | STOP | 정상 응답 |
+| gemma-4-31b-it | 4 | 1.95s | **MAX_TOKENS** | 본문 빈 문자열, thoughts 47토큰 |
+| gemma-4-26b-a4b-it | 4 | 1.56s | **MAX_TOKENS** | 본문 빈 문자열, thoughts 47토큰 |
+
+**여기서 예상 밖의 사실이 나왔다 (A-4).**
+
+### A-4. Gemma 4는 thinking_config를 생략하면 사고가 켜진 채로 동작한다 ★
+
+위 스트리밍 시험은 `thinking_config`를 **아예 보내지 않았다.** 그런데
+Gemma 두 모델 모두 `thoughts_token_count=47`이 기록되고 본문은 비었으며
+`finish_reason=MAX_TOKENS`가 나왔다. max_output 50을 사고 토큰이 전부 삼킨 것이다.
+
+같은 조건에서 `thinking_level="minimal"`을 명시하면 정상적으로 답한다
+(A-5 표의 minimal 행 — thoughts 없음, STOP).
+
+**구현 요구사항**: `client.py`는 **모든 요청에 `thinking_config`를 명시적으로 보낸다.**
+생략하면 Gemma가 사고 모드로 동작해 TPM을 갉아먹고 짧은 max_output에서는
+빈 응답이 나온다. 계획서 1.2절의 "`minimal`이 기본"은 Gemini에는 맞지만
+**Gemma에는 맞지 않는다.**
+
+또한 **사고 토큰은 `max_output_tokens` 예산에서 차감된다.** 출력 한도가 작으면
+사고만 하다 잘린다.
+
+### A-5. thinking_level 수용값 (부록 B-4 해소) — 계획서 1.2절 표와 일치
+
+프롬프트 "1+1은?", max_output 50.
+
+| 모델 | minimal | medium | high |
+|---|---|---|---|
+| gemini-3.5-flash-lite | ✅ STOP, thoughts 없음 | ✅ STOP, thoughts 없음 | ✅ thoughts 47, MAX_TOKENS |
+| gemma-4-31b-it | ✅ STOP, thoughts 없음 | ❌ **400** | ✅ thoughts 47, MAX_TOKENS |
+| gemma-4-26b-a4b-it | ✅ STOP, thoughts 없음 | ❌ **400** | ✅ thoughts 47, MAX_TOKENS |
+
+Gemma의 400 응답 본문:
+
+```json
+{"error": {"code": 400,
+           "message": "Thinking level is not supported for this model.",
+           "status": "INVALID_ARGUMENT"}}
+```
+
+계획서 1.2절 표(Gemini 3단계 / Gemma 2단계)가 실측으로 확인됐다.
+`models.py`의 `thinking_levels` 테이블은 수정할 필요가 없다.
+
+주의: Gemma의 400 메시지는 "이 모델은 사고 수준을 지원하지 않는다"고 말하지만
+`minimal`과 `high`는 정상 수용된다. 메시지 문구가 오해를 부르지만 동작은
+계획서대로 켜기/끄기 2단계다.
+
+### A-6. usage_metadata에서 실제로 채워지는 필드
+
+| 필드 | 관측 |
+|---|---|
+| `prompt_token_count` | 항상 채워짐 |
+| `candidates_token_count` | 본문이 있을 때만. 사고만 하고 잘리면 **None** |
+| `thoughts_token_count` | 사고했을 때만. 아니면 **None** |
+| `total_token_count` | 항상. **prompt + candidates + thoughts 합계** (6+47=53 확인) |
+| `tool_use_prompt_token_count` | 관측 구간에서 항상 None |
+| `cached_content_token_count` | 관측 구간에서 항상 None |
+
+`quota.py`(세션 3)는 `None`을 0으로 다뤄야 한다. `total_token_count`가
+사고 토큰을 포함하므로 사후 보정은 total 하나만 쓰면 된다.
+
+---
+
+## B. TPM 실측 — **입력 토큰만 센다** ★
+
+### B-0. 결론부터
+
+**TPM은 입력(prompt) 토큰만 계산한다. 출력도, 사고 토큰도 산입되지 않는다.**
+계획서 1.4·1.5절의 전제("한 요청이 소비할 토큰 = 컨텍스트 예산 + 최대 출력 토큰")는
+실측과 다르다.
+
+가장 직접적인 증거는 429가 스스로 밝히는 메트릭 이름이다.
+
+```
+Quota exceeded for metric:
+  generativelanguage.googleapis.com/generate_content_free_tier_input_token_count,
+  limit: 16000, model: gemma-4-31b
+Please retry in 19.917078239s.
+```
+
+`input_token_count`. 한도 16,000은 계획서 1.1절의 Gemma TPM과 일치한다.
+
+### B-1. 세 갈래 실험 (모두 gemma-4-31b-it)
+
+**1단계 — 큰 입력 / 작은 출력** (입력 9,012토큰, max_output 64)
+
+| 요청 | 입력 | 결과 |
+|---|---|---|
+| 1회 | 9,012 | ✅ 통과 (total 9,043) |
+| 2회 | 9,012 | ❌ **429** — 2.5초 만에 즉시 거절 |
+
+9,012 × 2 = 18,024 > 16,000. 입력만으로 한도에 걸린다.
+서버는 요청을 실행하기 전에 거절한다(2.5초는 생성 시간이 아니다).
+
+**2단계 — 작은 입력 / 큰 출력, 12개 병렬** (입력 16토큰, max_output 2,048)
+
+Gemma 는 2,048토큰 응답 하나에 45초가 걸려 순차 전송으로는 60초 창이 차지 않는다.
+그래서 병렬로 던져 같은 창에 몰아넣었다.
+
+| 항목 | 값 |
+|---|---|
+| 성공 | 11 / 12 (1건은 429 아닌 **503 UNAVAILABLE** — 일시적 과부하) |
+| 소요 | 56.1초 (한 창 안) |
+| 누적 입력 | **176** |
+| 누적 본문 출력 | **19,082** |
+| 누적 전체 | 19,258 |
+| **버스트 직후 작은 확인 요청** | ✅ **통과** |
+
+한 창 안에서 19,082 토큰을 출력했는데도 곧바로 보낸 요청이 통과했다.
+출력이 산입된다면 진작 429여야 한다.
+
+**3단계 — 사고 켬, 8개 병렬** (thinking_level=high, max_output 2,048)
+
+| 항목 | 값 |
+|---|---|
+| 성공 | 8 / 8 |
+| 누적 입력 | **128** |
+| 누적 본문 | 10,629 |
+| 누적 **사고** | **5,729** |
+| 누적 전체 | 16,486 |
+| **버스트 직후 작은 확인 요청** | ✅ **통과** |
+
+사고 토큰 5,729를 포함해 전체 16,486을 썼는데도 통과했다.
+**부록 B-2 해소 — 사고 토큰은 TPM에 산입되지 않는다.**
+
+다만 사고 토큰은 여전히 두 곳에 영향을 준다.
+- `max_output_tokens` 예산에서 차감된다 (A-4: 50토큰 한도에서 사고가 다 먹고 빈 응답)
+- `total_token_count`에 포함된다 (비용·표시용 계산에는 잡힌다)
+
+### B-2. TPM은 60초 슬라이딩 윈도우이며 정상 복구된다
+
+1단계에서 429를 맞은 뒤 70초 대기하자 2단계 11건, 다시 70초 뒤 3단계 8건이
+모두 정상 처리됐다. 429 본문도 `Please retry in 19.9s`라고 복구 시각을 알려준다.
+**한도를 넘겨도 그 모델을 더 못 쓰게 되는 일은 관측되지 않았다.**
+(RPD 소진은 별개 사건이다 — B-4 참조)
+
+### B-3. 429 응답의 전체 구조 (부록 B-8 해소)
+
+TPM 429 상세가 800자에서 잘려 저장됐으므로, Gemma 를 다시 때리는 대신
+Gemini 의 RPM 15를 작은 요청 18개로 넘겨 전체 구조를 받아냈다 (성공 14 / 429 4건).
+
+```json
+{"error": {
+  "code": 429,
+  "message": "... Quota exceeded for metric: .../generate_content_free_tier_requests,
+              limit: 15, model: gemini-3.5-flash-lite\nPlease retry in 31.691162057s.",
+  "status": "RESOURCE_EXHAUSTED",
+  "details": [
+    {"@type": "type.googleapis.com/google.rpc.Help", "links": [...]},
+    {"@type": "type.googleapis.com/google.rpc.QuotaFailure",
+     "violations": [{"quotaMetric": ".../generate_content_free_tier_requests",
+                     "quotaId": "GenerateRequestsPerMinutePerProjectPerModel-FreeTier",
+                     "quotaDimensions": {"location": "global", "model": "gemini-3.5-flash-lite"},
+                     "quotaValue": "15"}]},
+    {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "31s"}
+  ]}}
+```
+
+**`retryDelay`는 존재한다.** 다만 두 곳에 형태가 다르다.
+- `RetryInfo.retryDelay` — `"31s"` (초 단위 반올림 문자열)
+- `message` 본문 — `"Please retry in 31.691162057s."` (소수점까지)
+
+`quotaId`로 **어떤 한도에 걸렸는지 구분할 수 있다**
+(`...PerMinute...` / `...PerDay...`). 이건 계획서 2.3절의 4가지 사전 판정을
+서버 응답과 대조하는 데 그대로 쓸 수 있다.
+
+주의: **C절의 그라운딩 429에는 `QuotaFailure`도 `RetryInfo`도 없었다.**
+`Help` 링크뿐이다. 따라서 `quota.py`는 두 형태를 모두 다뤄야 한다.
+파싱 실패 시 스택트레이스 대신 "서버가 대기 시간을 알려주지 않았습니다"로 처리할 것.
+
+또한 RPM 실측으로 `gemini-3.5-flash-lite`의 `quotaValue: "15"`가 확인됐다
+(계획서 1.1절 RPM 15와 일치).
+
+### B-4. RPD 리셋 시각 — 미해결 (부록 B-9)
+
+한 세션 안에서는 확인할 수 없다. RPD를 소진시키려면 Gemini 500회를 써야 하고,
+리셋 시각은 하루 이상 관찰해야 한다. `quotaId`가 `...PerDay...` 형태로 온다는 것만
+확인했다. 실사용 중 RPD 429가 나오면 그때 `quotaId`와 `retryDelay`를 기록해
+확정하는 것이 현실적이다.
+
+### B-5. 한국어 대화의 턴당 토큰 (부록 B-3)
+
+`gemini-3.5-flash-lite`, thinking minimal, max_output 512로 5턴을 실제로 주고받았다.
+
+| 턴 | 요청 시 입력(prompt) | 증가분 | 응답 본문 | Gemma count_tokens |
+|---|---|---|---|---|
+| 1 | 25 | — | 508 (MAX_TOKENS) | 534 |
+| 2 | 555 | +530 | 508 (MAX_TOKENS) | 1,064 |
+| 3 | 1,082 | +527 | 508 (MAX_TOKENS) | 1,591 |
+| 4 | 1,611 | +529 | 508 (MAX_TOKENS) | 2,120 |
+| 5 | 2,133 | +522 | 176 (STOP) | 2,310 |
+
+- 턴당 증가 **약 525~530토큰**. 계획서 1.5절의 "턴당 약 600토큰" 가정과 대체로 맞는다.
+- **단, 이 값은 응답을 512토큰에서 자른 결과다.** 1~4턴이 모두 MAX_TOKENS로
+  끊겼으므로 실제 한국어 답변은 그보다 길다. 계획서가 Gemma 기본 최대 출력으로
+  잡은 2,048을 그대로 쓰면 턴당 증가가 최대 2,100토큰까지 커질 수 있고,
+  그 경우 예산 3,000은 1~2턴이면 찬다.
+- 세 모델의 `count_tokens` 결과는 사실상 동일하다(오차 1토큰). 즉 **Gemini로 센
+  토큰 수를 Gemma 예산 판정에 그대로 써도 된다.**
+
+### B-6. 토크나이저 실측 (계획서 2.2절 상수)
+
+| 표본 | 문자 | 토큰 | 문자/토큰 |
+|---|---|---|---|
+| 한국어 짧은 문장 | 39 | 23 | 1.70 |
+| 한국어 긴 문단 (14,700자) | 14,700 | 9,002 | **1.63** |
+| 영어 문장 | 69 | 19 | 3.63 |
+
+계획서 2.2절의 추정 상수는 한국어 1.5자/토큰, 영어 4자/토큰이다.
+한국어는 실제(1.63~1.70)보다 작게 잡아 토큰을 **과대 추정**하므로 안전한 방향이고,
+영어는 실제(3.63)보다 크게 잡아 **과소 추정**하므로 위험한 방향이다.
+
+---
+
+## C. 웹 검색 그라운딩 — **무료 티어에서 사용 불가** ★
+
+### C-1. 관측
+
+`types.Tool(google_search=types.GoogleSearch())`를 붙인 요청은 **모델과 무관하게
+즉시 429**를 받는다. 같은 시각 같은 모델에 도구만 빼면 정상 응답한다.
+
+| 시험 | 도구 | 결과 |
+|---|---|---|
+| gemini-3.5-flash-lite | 없음 | ✅ 200 (정상 응답) |
+| gemini-3.5-flash-lite | google_search | ❌ **429 RESOURCE_EXHAUSTED** |
+| gemini-3.5-flash-lite | google_search (재시도) | ❌ 429 |
+| gemini-3.5-flash-lite | 없음 | ✅ 200 |
+| gemini-3.5-flash | google_search | ❌ 429 |
+| gemini-3.1-flash-lite | google_search | ❌ 429 |
+| gemma-4-31b-it | google_search | ✅ 200 — **400이 아니다.** 단 grounding_metadata 없음 |
+
+도구 없는 호출이 앞뒤로 성공하므로 모델 단위 RPM/RPD 소진이 아니다.
+**검색 그라운딩 전용 할당량이 이 키 등급에서 0**이라고 판단한다.
+
+### C-2. 429 응답에 retry_delay가 없다 (부록 B-8 부분 해소)
+
+```json
+{"error": {"code": 429,
+           "message": "You exceeded your current quota, please check your plan and billing details. ...",
+           "status": "RESOURCE_EXHAUSTED",
+           "details": [{"@type": "type.googleapis.com/google.rpc.Help",
+                        "links": [{"description": "Learn more about Gemini API quotas",
+                                   "url": "https://ai.google.dev/gemini-api/docs/rate-limits"}]}]}}
+```
+
+`details`에 `RetryInfo`가 없고 `Help` 링크만 있다. **`retry_delay`를 파싱할 수 없다.**
+계획서 2.3절은 "429의 `retry_delay`를 파싱해 추적기를 보정한다"고 되어 있으나,
+적어도 이 형태의 429에는 그 필드가 없다. TPM 초과로 인한 429에도 없는지는
+B절 실험에서 확인한다.
+
+### C-3. 검색을 쓰지 않은 응답의 grounding_metadata (부록 B-13 해소)
+
+- `candidate.grounding_metadata`는 **속성은 항상 존재하고 값이 `None`** 이다
+  (`hasattr` True, 값 None).
+- 따라서 UI의 출처 영역 표시 여부는 **`grounding_metadata is None`** 하나로 갈린다.
+  `search_entry_point`까지 볼 필요가 없다.
+
+### C-4. Gemma는 google_search 도구를 거부하지 않는다 (부록 B-11)
+
+`gemma-4-31b-it`에 도구를 붙여도 400이 나지 않고 200이 온다. 다만
+`grounding_metadata`는 `None`이라 실제로 검색을 수행했다는 증거는 없다.
+계획서 2.10절 결정대로 **v1은 Gemini 전용을 유지한다** (이 결과는 결정을 바꾸지 않는다).
+
+### C-5. 미해결
+
+부록 B-12(검색 쿼리 과금을 응답의 어떤 필드로 세는가)는 그라운딩 응답을
+한 번도 받지 못해 확인할 수 없다. 유료 티어 전환 후 재측정이 필요하다.
+`grounding_chunks` / `search_entry_point.rendered_content`의 실제 형태도 미확인이다.
+
+---
+
+## D. 계획서·models.py 갱신 제안
+
+**사용자 확인 전에는 아무것도 반영하지 않는다.** 아래는 제안이다.
+
+### D-1. models.py — 값 수정 (승인 시 즉시 반영 가능)
+
+| 모델 | 필드 | 현재(세션 1 잠정) | 제안 | 근거 |
+|---|---|---|---|---|
+| gemma-4-31b-it | `max_output_tokens` | 8,192 | **32,768** | A-1 |
+| gemma-4-26b-a4b-it | `max_output_tokens` | 8,192 | **32,768** | A-1 |
+| 3개 모델 | `context_window` | 그대로 | 변경 없음 | A-1 에서 잠정값이 맞았음 |
+| gemini-3.5-flash-lite | `max_output_tokens` | 65,536 | 변경 없음 | A-1 |
+
+`price_in_per_mtok` / `price_out_per_mtok`는 **API로 조회할 수 없다.**
+`models.get()`도 `models.list()`도 단가를 돌려주지 않는다. 실측으로 채울 수 없으므로
+공개 가격표를 보고 손으로 넣거나, 비용 표시(계획서 2.8절)를 쓰는 세션까지
+`None`으로 두는 두 가지 길이 있다.
+
+### D-2. 계획서 1.4·1.5절 — 전제가 실측과 다르다 (사용자 판단 필요)
+
+계획서: **"한 요청이 소비할 토큰 = 컨텍스트 예산 + 최대 출력 토큰"**
+실측: **TPM은 입력만 센다. 최대 출력은 TPM과 무관하다.**
+
+이에 따라 Gemma 의 분당 가능 횟수가 달라진다 (가용 14,400 = TPM의 90%).
+
+| 컨텍스트 예산 | 계획서 1.5절 (예산+출력 기준) | **실측 기준 (예산만)** |
+|---|---|---|
+| 1,500 | 약 4.1회/분 · 15초 간격 | 9.6회/분 · 6.3초 |
+| **3,000 (기본)** | **2.8회/분 · 21초** | **4.8회/분 · 12.5초** |
+| 6,000 | 1.8회/분 · 33초 | 2.4회/분 · 25초 |
+| 9,000 | 1.3회/분 · 55초 | 1.6회/분 · 37초 |
+| 12,000 | 1.1회/분 · 90초 | 1.2회/분 · 50초 |
+
+영향받는 곳:
+- 1.5절의 대기 시간 표 전체
+- 1.4절 "예산 + 최대출력이 TPM의 90%를 넘으면 슬라이더를 막는다"
+  → 실측상 제약은 **예산 ≤ 14,400** 하나로 충분하다
+- 2.3절 사전 판정의 TPM 계산식 (세션 3)
+- 세션 1 테스트 `test_요청당_최대소비가_TPM의_90퍼센트를_넘지_않는다`
+
+### D-3. Gemma 기본 예산 3,000의 근거가 흔들린다 (사용자 판단 필요)
+
+계획서 1.4절은 "3,000 토큰 = 약 5턴"이라고 본다. B-5 실측에서 5턴 뒤 컨텍스트가
+2,310토큰이었으므로 **응답이 500토큰 수준이면 그 추정이 맞다.**
+
+그러나 Gemma 의 `default_max_output`은 2,048이다. 응답이 그 길이에 가까워지면
+턴당 증가가 2,100토큰에 달해 3,000 예산은 1~2턴이면 찬다.
+실측에서 한국어 답변은 512토큰 제한에 매번 걸렸다(즉 자연 길이는 그 이상이다).
+
+선택지 (권고 아님, 판단 요청):
+1. 예산 3,000 유지 + Gemma `default_max_output`을 512~768로 낮춰 턴당 증가를 묶는다
+2. TPM 여유가 실측으로 늘었으니 예산을 6,000~9,000으로 올린다
+3. 그대로 두고 세션 4의 실사용에서 재판단한다
+
+### D-4. 계획서 2.2절 토큰 추정 상수
+
+| 언어 | 계획서 | 실측 | 제안 |
+|---|---|---|---|
+| 한국어 | 1.5자/토큰 | 1.63~1.70 | 유지 (안전한 방향) 또는 1.6 |
+| 영어 | 4자/토큰 | 3.63 | **3.5로 낮춤** (현재는 토큰을 과소 추정) |
+
+### D-5. 계획서 2.3절 — 429 처리
+
+- `retry_delay` 파싱은 가능하다. `details`의 `google.rpc.RetryInfo.retryDelay`를 우선
+  보고, 없으면 message 의 `Please retry in ([0-9.]+)s` 를 정규식으로 잡는다.
+- 단 **그라운딩 429처럼 둘 다 없는 429가 실재한다.** 이 경우를 정상 경로로 처리한다.
+- `quotaId`(`...PerMinute...` / `...PerDay...`)로 어느 한도인지 구분할 수 있다.
+
+### D-6. 계획서 2.10절 — 검색 그라운딩 (사용자 판단 필요)
+
+C절대로 **현재 키에서는 호출 자체가 불가능하다.** v1 포함 결정을 유지하려면
+결제 연결이 필요하다. 선택지:
+1. 결제를 붙여 세션 5에서 정상 구현·검증
+2. v1에서 제외하고 계획서 2.10절을 후속 확장으로 옮김
+3. 코드는 구현하되 429를 "이 키 등급에서는 검색을 쓸 수 없습니다"로 안내
+
+### D-7. client.py 구현에 반영할 실측 사항 (값 변경 아님)
+
+- **모든 요청에 `thinking_config`를 명시한다.** 생략 시 Gemma 는 사고가 켜진다 (A-4)
+- Gemma 에 `medium`을 보내면 400이므로, 전송 전에 `resolve_thinking_level`로 거른다 (A-5)
+- `usage_metadata`의 각 필드는 `None`일 수 있다. 0으로 다룬다 (A-6)
+- 429 외에 **503 UNAVAILABLE**(일시적 과부하)이 실제로 발생한다 (B-1 2단계).
+  429와 구분해 재시도 안내를 다르게 해야 한다
