@@ -1,0 +1,13 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# 계획서는 단일 진실 원천 문서다. 안에 든 코드 블록을 포맷터가 손대지 않게 한다.
+extend-exclude = ["doc"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `pytest` 를 그냥 실행해도 gchat 패키지를 찾도록 한다 (`python -m pytest` 없이도).
+pythonpath = ["."]

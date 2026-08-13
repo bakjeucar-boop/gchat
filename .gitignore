@@ -1,0 +1,20 @@
+# secrets — 절대 커밋하지 않는다 (계획서 2.7절)
+.streamlit/secrets.toml
+
+# 가상환경
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# 편집기 / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
