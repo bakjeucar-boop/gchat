@@ -1,2 +1,5 @@
 streamlit==1.54.0
 google-genai==1.65.0
+# RPD 리셋을 태평양 시간 자정으로 계산한다 (계획서 1.5절). Windows 에서는
+# zoneinfo 가 이 패키지를 통해서만 시간대 정보를 찾는다.
+tzdata==2025.2
