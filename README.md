@@ -2,7 +2,7 @@
 
 Streamlit 기반 개인용 AI 챗봇. Google Gemini API (google-genai SDK) 사용.
 
-요구사항과 개발 계획은 [doc/gchat_계획서.md](doc/gchat_계획서.md)에 있다.
+요구사항과 개발 계획은 [docs/gchat_계획서.md](docs/gchat_계획서.md)에 있다.
 
 ## 설치
 

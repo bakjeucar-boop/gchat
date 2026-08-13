@@ -2,7 +2,7 @@
 line-length = 100
 target-version = "py312"
 # 계획서는 단일 진실 원천 문서다. 안에 든 코드 블록을 포맷터가 손대지 않게 한다.
-extend-exclude = ["doc"]
+extend-exclude = ["docs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

@@ -3,7 +3,7 @@
 Streamlit 기반 개인용 AI 챗봇. Google Gemini API 사용.
 
 ## 원칙
-- `doc/gchat_계획서.md`가 단일 진실 원천이다. 다르게 구현할 이유가 생기면
+- `docs/gchat_계획서.md`가 단일 진실 원천이다. 다르게 구현할 이유가 생기면
   임의로 바꾸지 말고 근거를 보고하고 승인을 받은 뒤 계획서를 갱신한다.
 - 모델별 능력·한도는 `gchat/models.py`의 테이블에만 기술한다.
   UI·client·quota는 이 테이블을 참조할 뿐 값을 하드코딩하지 않는다.
@@ -19,7 +19,6 @@ Streamlit 기반 개인용 AI 챗봇. Google Gemini API 사용.
 - Windows 11, Python 3.12, 전역 pip (venv·uv 미사용 — 사용자 결정, 2026-08-13)
 - 작업 폴더: C:\Users\user\Documents\claude_code\gchat
 - 테스트: pytest / 린트: ruff / 타입: mypy
-- 계획서 폴더는 `doc/` 이다 (계획서 3절 표기는 `docs/` 이나 실물은 `doc/`)
 
 ## v1 제외 (구현하지 말 것)
 - 별도 설정 메뉴·패널. 컨트롤은 입력창 위 컨트롤 바에만 둔다 (2.6절)

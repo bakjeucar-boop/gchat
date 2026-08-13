@@ -14,9 +14,9 @@
 | 프레임워크 | Streamlit |
 | 배포 | Streamlit Community Cloud |
 | LLM | Google Gemini API (google-genai SDK) |
-| 작업 폴더 | `C:\Users\SAMSUNG\Documents\gchat` |
+| 작업 폴더 | `C:\Users\user\Documents\claude_code\gchat` (세션1에서 확정, 계획서 원안과 다름) |
 | 패키지명 | `gchat` |
-| Python | 3.12 (venv + pip, uv 미사용) |
+| Python | 3.12, 전역 pip 설치 (세션1에서 venv 대신 전역 pip으로 확정) |
 
 **v1 범위에서 제외한 것 (나중에 별도 구현)**
 - 대화 이력의 영구 저장 (SQLite / 외부 DB)
@@ -185,7 +185,7 @@ Gemini 3.5 Flash-Lite는 TPM 250,000이라 위 계산에서 자유롭다.
 
 ### 2.1.1 모델 전환 규칙
 
-계열(`family`)이 바뀌면 컨텍스트 예산이 32,000 ↔ 6,000으로 크게 달라져 대량 절단이
+계열(`family`)이 바뀌면 컨텍스트 예산이 32,000 ↔ 3,000으로 크게 달라져 대량 절단이
 불가피하다. 절단된 채 어색하게 이어가는 것보다 **새 대화로 끊는 편이 명확하다.**
 
 | 전환 | 동작 |
