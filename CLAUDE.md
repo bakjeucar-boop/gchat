@@ -43,5 +43,10 @@ Streamlit 기반 개인용 AI 챗봇. Google Gemini API 사용.
 - 세션 1 완료: 골격, `models.py`, `state.py`, `auth.py`, 최소 화면, 테스트
 - 세션 2 완료: 실측(`scripts/probe_models.py` → `docs/api_findings.md`),
   `models.py` 실측 반영, 계획서 1.4·1.5·2.10절 갱신, `client.py`
-- 다음: 세션 3 — `quota.py` + `context.py` (가짜 시계로 한도 시나리오 테스트)
-- 남은 미해결: RPD 리셋 시각(부록 B-9), 가격 필드(수동 입력 필요)
+- 세션 3 완료: `quota.py`(QuotaTracker·QuotaBook·429 보정) + `context.py`
+  (토큰 추정·경계 실호출·예산 절단). 가짜 시계 테스트 150건
+- 다음: 세션 4 — `ui/chat.py`, `ui/sidebar.py`. 아래 순서로 엮는다
+  `context.fit_to_budget` → `quota.precheck` → `client.stream` →
+  `quota.record_usage_from`
+- 남은 미해결: RPD 리셋 시각(부록 B "열려 있는 사항" 1),
+  가격 필드(수동 입력 필요), Gemma 실제 턴 수(세션 4 실사용에서 확인)
