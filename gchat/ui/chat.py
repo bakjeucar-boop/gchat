@@ -74,7 +74,7 @@ def _render_header(conv: Conversation) -> None:
 def _render_messages(conv: Conversation) -> None:
     """절단된 메시지도 화면에는 그대로 남긴다 (계획서 2.2절)."""
     shown_truncation_note = False
-    for message in conv.messages:
+    for index, message in enumerate(conv.messages):
         if message.truncated_from_context and not shown_truncation_note:
             trimmed = sum(1 for m in conv.messages if m.truncated_from_context)
             st.info(f"앞선 {trimmed}개 메시지가 컨텍스트에서 제외됨 (모델 한도)")
@@ -83,6 +83,24 @@ def _render_messages(conv: Conversation) -> None:
         with st.chat_message(avatar):
             st.markdown(message.content)
             _render_message_meta(message)
+            _render_copy(conv, index, message)
+
+
+def _render_copy(conv: Conversation, index: int, message: Message) -> None:
+    """메시지 단위 복사 (계획서 2.4.1절).
+
+    복사되는 것은 렌더링된 HTML 이 아니라 **원본 Markdown** 이다. 코드 블록·
+    목록·표가 살아 있어야 다른 곳에 붙일 때 쓸모가 있다. 토큰 수·지연 시간
+    같은 메타 정보는 넣지 않는다.
+
+    구현은 st.code 방식이다. Streamlit 이 코드 블록에 복사 아이콘을 붙여주므로
+    자바스크립트 없이 같은 목적을 달성한다. 평소에는 접어 둔다.
+    """
+    if not message.content.strip():
+        return
+    with st.popover("📋 복사", help="원본 Markdown 을 복사합니다"):
+        st.caption("오른쪽 위 복사 아이콘을 누르세요.")
+        st.code(message.content, language=None, wrap_lines=True)
 
 
 def _render_message_meta(message: Message) -> None:

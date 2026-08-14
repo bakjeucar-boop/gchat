@@ -40,8 +40,8 @@ EXPECTED_LIMITS = {
 # Gemma 는 세션 4 실사용 후 3,000·768 에서 상향됐다.
 EXPECTED_BUDGETS = {
     "gemini-3.5-flash-lite": (32_000, 4_096),
-    "gemma-4-31b-it": (9_000, 1_536),
-    "gemma-4-26b-a4b-it": (9_000, 1_536),
+    "gemma-4-31b-it": (9_000, 2_048),
+    "gemma-4-26b-a4b-it": (9_000, 2_048),
 }
 
 # 세션 2 실측 (models.get) — (context_window, max_output_tokens)
@@ -205,11 +205,12 @@ def test_Gemini는_기본_인스트럭션이_없다():
 
 @pytest.mark.parametrize("spec", models_in_family(FAMILY_GEMMA4), ids=lambda s: s.id)
 def test_Gemma는_간결하게_쓰라는_기본_인스트럭션을_갖는다(spec: ModelSpec):
-    """계획서 2.6.2절 — 자연 답변 약 3,000토큰을 줄이는 유일한 수단."""
+    """계획서 2.6.2절 — 자연 답변 약 3,000토큰을 목표 범위로 끌어오는 유일한 수단."""
     instruction = spec.default_system_instruction
-    assert instruction
-    assert "2,000자" in instruction
     assert instruction == GEMMA_DEFAULT_INSTRUCTION
+    # 세션 5 재개정의 핵심은 하한 지시다. 상한만 주면 모델이 계속 아래로 내려간다.
+    assert "너무 짧게 줄이지 말고" in instruction
+    assert "1,600~2,400자" in instruction  # = 1,000~1,500 토큰 (2.2절 상수 1.6자/토큰)
 
 
 def test_기본_인스트럭션은_모델_테이블에만_있다():

@@ -1,40 +1,61 @@
-"""사이드바 — 휘발성 경고, 대화 목록, 삭제, 한도 표시 (계획서 2.4 / 2.6.3절).
+"""사이드바 (계획서 2.6.3절 순서 그대로).
 
-설정 항목은 사이드바에 두지 않는다 (계획서 2.6.3절).
-한도는 진행바 3종으로 보이고, Gemma 에서는 TPM 을 맨 위에 둔다 (계획서 2.3절).
+1. 새 대화  2. 설정  3. 대화 목록  4. 한도 게이지  5. 일괄 삭제
+6. 휘발성 경고  7. Markdown 내보내기
+
+6·7 을 붙여 두는 것이 핵심이다 — 경고를 읽은 자리에서 바로 내려받을 수 있다.
+세션 4 에서는 경고가 맨 위였으나, 정작 할 수 있는 일이 맨 아래라 동선이
+어긋난다는 실사용 피드백으로 옮겼다 (계획서 2.4절).
 """
 
 from __future__ import annotations
+
+from collections.abc import Callable
 
 import streamlit as st
 
 from gchat import state
 from gchat.models import FAMILY_GEMMA4, get_model
 from gchat.quota import QuotaBook
+from gchat.state import Conversation
+from gchat.ui import controls
 
 VOLATILE_WARNING = (
     "⚠️ 대화는 이 세션에서만 유지됩니다. 새로고침하면 사라집니다.\n\n"
-    "남기려면 Markdown으로 내려받으세요."
+    "남기려면 아래에서 Markdown으로 내려받으세요."
 )
 
 
-def render(book: QuotaBook) -> None:
+def render(
+    book: QuotaBook,
+    conv: Conversation,
+    *,
+    export_section: Callable[[], None] | None = None,
+) -> None:
     with st.sidebar:
-        # 계획서 2.4절 — 상단에 고정한다.
-        st.warning(VOLATILE_WARNING)
-
-        if st.button("＋ 새 대화", width="stretch"):
-            state.clear_deleted()
-            current = state.active_conversation()
-            state.start_conversation(state.active_model_id(), inherit_from=current)
-            st.rerun()
-
+        _render_new_conversation()
+        controls.render_settings(conv)
         _render_conversations()
         _render_undo()
-        _render_bulk_delete()
         _render_quota(book)
+        _render_bulk_delete()
 
-        st.caption("Markdown 내보내기는 세션 6에서 붙습니다.")
+        # 계획서 2.4절 — 경고와 대응 수단(내보내기)을 붙여 둔다.
+        st.warning(VOLATILE_WARNING)
+        if export_section is not None:
+            export_section()
+        else:
+            st.caption("Markdown 내보내기는 세션 6에서 붙습니다.")
+
+
+def _render_new_conversation() -> None:
+    if st.button("＋ 새 대화", width="stretch"):
+        state.clear_deleted()
+        current = state.active_conversation()
+        # 이미 빈 대화면 새로 만들지 않는다 (계획서 2.4절 — 빈 대화는 최대 1개).
+        if current is None or not current.is_empty:
+            state.start_conversation(state.active_model_id(), inherit_from=current)
+        st.rerun()
 
 
 def _render_conversations() -> None:
@@ -48,12 +69,16 @@ def _render_conversations() -> None:
 
     for conv in conversations:
         open_col, edit_col, delete_col = st.columns([6, 1, 1], vertical_alignment="center")
-        label = ("● " if conv.id == active_id else "") + conv.title
+        marker = "● " if conv.id == active_id else ""
+        # 계획서 2.4절 — 목록은 훑어보는 곳이므로 작은 글씨로, 전체 제목은 툴팁으로.
+        tooltip = (
+            f"{conv.title}\n\n{get_model(conv.model_id).label} · 메시지 {len(conv.messages)}개"
+        )
         if open_col.button(
-            label,
+            f"{marker}{conv.display_title()}",
             key=f"open_{conv.id}",
             width="stretch",
-            help=f"{get_model(conv.model_id).label} · 메시지 {len(conv.messages)}개",
+            help=tooltip,
         ):
             state.clear_deleted()
             st.session_state[state.S_ACTIVE_CONVERSATION] = conv.id
@@ -64,7 +89,7 @@ def _render_conversations() -> None:
                 "제목", value=conv.title, key=f"title_{conv.id}", max_chars=60
             )
             if st.button("저장", key=f"save_title_{conv.id}"):
-                conv.title = new_title.strip() or state.DEFAULT_TITLE
+                state.rename_conversation(conv, new_title)
                 st.rerun()
 
         if delete_col.button("🗑", key=f"delete_{conv.id}", help="이 대화 삭제"):
@@ -75,14 +100,13 @@ def _render_conversations() -> None:
 def _render_undo() -> None:
     """되돌리기 (계획서 2.4절).
 
-    계획서 문구는 "되돌리기 5초"지만 Streamlit 은 상호작용이 있어야 화면을
-    다시 그리므로 초 단위 자동 소멸을 만들 수 없다. 세션 4 결정에 따라
-    **다음 조작까지** 버튼을 유지한다.
+    계획서 문구는 당초 "5초"였으나 Streamlit 에는 시간 기반 자동 소멸 수단이
+    없어 **다음 조작까지** 유지한다 (세션 4 조정).
     """
     removed = state.deleted_conversation()
     if removed is None:
         return
-    if st.button(f"↩️ '{removed.title}' 삭제 취소", width="stretch"):
+    if st.button(f"↩️ '{removed.display_title()}' 삭제 취소", width="stretch"):
         state.restore_deleted()
         st.rerun()
 
@@ -123,18 +147,20 @@ def _render_quota(book: QuotaBook) -> None:
     st.subheader("한도", divider="gray")
     st.caption(spec.label)
 
+    tpm_text = f"{_compact(gauges.input_tokens_in_window)} / {_compact(gauges.tpm_limit)}"
     tpm_label = (
-        f"**분당 토큰** {_compact(gauges.input_tokens_in_window)} / {_compact(gauges.tpm_limit)}"
-        if spec.family == FAMILY_GEMMA4
-        else f"분당 토큰 {_compact(gauges.input_tokens_in_window)} / {_compact(gauges.tpm_limit)}"
+        f"**분당 토큰** {tpm_text}" if spec.family == FAMILY_GEMMA4 else f"분당 토큰 {tpm_text}"
     )
-    rpm_label = f"분당 요청 {gauges.requests_in_window} / {gauges.rpm_limit}"
-    rpd_label = f"일일 요청 {gauges.daily_requests:,} / {gauges.rpd_limit:,}"
-
     bars = [
         (tpm_label, _ratio(gauges.input_tokens_in_window, gauges.tpm_limit)),
-        (rpm_label, _ratio(gauges.requests_in_window, gauges.rpm_limit)),
-        (rpd_label, _ratio(gauges.daily_requests, gauges.rpd_limit)),
+        (
+            f"분당 요청 {gauges.requests_in_window} / {gauges.rpm_limit}",
+            _ratio(gauges.requests_in_window, gauges.rpm_limit),
+        ),
+        (
+            f"일일 요청 {gauges.daily_requests:,} / {gauges.rpd_limit:,}",
+            _ratio(gauges.daily_requests, gauges.rpd_limit),
+        ),
     ]
     if spec.family != FAMILY_GEMMA4:
         # Gemini 는 TPM 이 병목이 아니므로 요청 게이지를 위에 둔다.

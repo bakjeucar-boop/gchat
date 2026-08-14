@@ -54,8 +54,6 @@ def _quota_book() -> QuotaBook:
 book = _quota_book()
 client = _client()
 
-sidebar.render(book)
-
 st.title("gchat")
 
 if client is None:
@@ -64,8 +62,13 @@ if client is None:
         "`.streamlit/secrets.toml` 에 API 키를 넣어야 응답 생성이 동작합니다."
     )
 
-# 순서가 화면 배치다 — 대화 이력, 그 아래 컨트롤 바, 맨 아래 입력창.
+# 순서가 화면 배치다 (계획서 2.6절).
+# 조작은 사이드바 설정, 본문은 확인 블록 → 대화 이력 → 표시 전용 배지 → 입력창.
 conversation = state.ensure_conversation()
+sidebar.render(book, conversation)
+
+controls.render_family_confirmation(conversation)
+controls.drain_notes()
 chat.render_history(conversation)
-controls.render(book, conversation)
+controls.render_badge(book, conversation)
 chat.render_input(client, book, conversation)

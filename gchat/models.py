@@ -58,15 +58,20 @@ class ModelSpec:
     price_out_per_mtok: float | None
 
 
-# 사고 수준의 표시 라벨은 계열별로 다르다 (계획서 1.3절).
 # 계획서 2.6.2절 — Gemma 는 자연 답변이 약 3,000토큰으로 장황하다 (세션 4 실사용).
 # max_output_tokens 로는 줄일 수 없다. 그건 자르는 칼이지 짧게 쓰게 만드는 손잡이가
 # 아니다. 생성 길이 자체를 바꾸는 유일한 수단이 시스템 인스트럭션이다.
+#
+# 세션 5 재개정: 첫 문구("2,000자 이내")는 출력을 435토큰까지 떨어뜨려 너무 짧았다.
+# 목표는 1,000~1,500토큰(= 1,600~2,400자)이다. 상한만 주면 모델이 계속 아래로
+# 내려가므로 **하한 지시("너무 짧게 줄이지 말고")를 명시한 것이 개정의 핵심**이다.
 GEMMA_DEFAULT_INSTRUCTION = (
-    "답변은 핵심만 간결하게 쓴다. 사용자가 길게 요청하지 않는 한 2,000자 이내로 "
-    "답한다. 불필요한 서론·요약·반복을 넣지 않는다."
+    "답변은 보통 1,600~2,400자 정도로 충분히 설명한다. 너무 짧게 줄이지 말고, "
+    "필요한 근거와 예시는 포함한다. 다만 같은 내용을 반복하거나 형식적인 "
+    "서론·맺음말은 넣지 않는다."
 )
 
+# 사고 수준의 표시 라벨은 계열별로 다르다 (계획서 1.3절).
 THINKING_LABELS: dict[str, dict[str, str]] = {
     FAMILY_GEMINI3: {"minimal": "빠름", "medium": "보통", "high": "깊게"},
     FAMILY_GEMMA4: {"minimal": "사고 끄기", "high": "사고 켜기"},
@@ -114,9 +119,10 @@ MODELS: tuple[ModelSpec, ...] = (
         # TPM 은 실제로 걸리지 않았다 — 6턴 내내 대기 0회, 창 사용률 29%.
         # 예산 9,000 의 TPM상 최소 간격 37.5초 < 출력 1,536 의 생성 시간 약 50초.
         default_context_budget=9_000,
-        # 768 → 1,536. 이제 일상적 상한이 아니라 안전장치다. 길이를 실제로 줄이는
-        # 것은 default_system_instruction 이다 (계획서 2.6.2절).
-        default_max_output=1_536,
+        # 768 → 1,536 → 2,048 (세션 5 후 재상향). 목표 답변이 1,000~1,500토큰이라
+        # 1,536 은 목표 상단과 너무 가까워 잘림이 생겼다. 이 값은 안전장치이고
+        # 실제 길이를 정하는 것은 default_system_instruction 이다 (계획서 2.6.2절).
+        default_max_output=2_048,
         price_in_per_mtok=None,
         price_out_per_mtok=None,
     ),
@@ -135,7 +141,7 @@ MODELS: tuple[ModelSpec, ...] = (
         context_window=262_144,
         limits=RateLimits(rpm=30, tpm=16_000, rpd=14_400),
         default_context_budget=9_000,
-        default_max_output=1_536,
+        default_max_output=2_048,
         price_in_per_mtok=None,
         price_out_per_mtok=None,
     ),

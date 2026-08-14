@@ -128,23 +128,44 @@ class Conversation:
     settings: Settings
     created_at: datetime = field(default_factory=now_kst)
     updated_at: datetime = field(default_factory=now_kst)
+    # 계획서 2.4절 자료구조에는 없으나, "사용자가 지정한 제목은 자르지 않는다"를
+    # 지키려면 자동 제목과 수동 제목을 구분해야 한다 (세션 6 추가).
+    title_customized: bool = False
 
     def touch(self) -> None:
         self.updated_at = now_kst()
 
+    @property
+    def is_empty(self) -> bool:
+        """메시지가 하나도 없는 대화인가 (계획서 2.4절 — 빈 대화는 최대 1개)."""
+        return not self.messages
 
-TITLE_LIMIT = 30
+    def display_title(self) -> str:
+        """목록에 보일 제목. 수동 지정한 제목은 자르지 않는다 (계획서 2.4절)."""
+        if self.title_customized:
+            return self.title
+        return shorten_title(self.title)
+
+
+# 계획서 2.4절 — 목록에서 읽기 쉽게 20자로 줄인다 (세션 5 실사용 후 30 → 20).
+TITLE_LIMIT = 20
 DEFAULT_TITLE = "새 대화"
 
 
-def title_from_first_message(text: str, limit: int = TITLE_LIMIT) -> str:
-    """첫 사용자 메시지의 앞 30자로 제목을 만든다 (계획서 2.4절).
+def title_from_first_message(text: str) -> str:
+    """첫 사용자 메시지에서 제목을 만든다 (계획서 2.4절).
 
-    줄바꿈과 연속 공백은 한 칸으로 눌러 한 줄로 만든다.
+    자르지 않고 한 줄로만 눌러 보관한다. 목록에서 20자로 줄이는 것은
+    표시 단계(shorten_title)의 몫이다 — 툴팁에 전체를 보여줘야 하므로
+    원본을 잃으면 안 된다.
     """
     collapsed = " ".join(text.split())
-    if not collapsed:
-        return DEFAULT_TITLE
+    return collapsed or DEFAULT_TITLE
+
+
+def shorten_title(title: str, limit: int = TITLE_LIMIT) -> str:
+    """목록 표시용으로 줄인다. 넘치면 뒤에 말줄임표를 붙인다 (계획서 2.4절)."""
+    collapsed = " ".join(title.split())
     if len(collapsed) <= limit:
         return collapsed
     return collapsed[:limit].rstrip() + "…"
@@ -264,18 +285,53 @@ def ensure_conversation() -> Conversation:
 
 
 def start_conversation(model_id: str, *, inherit_from: Conversation | None = None) -> Conversation:
-    """새 대화를 시작한다. 직전 대화의 설정을 이어받는다 (계획서 2.1.1절)."""
+    """새 대화를 시작한다. 직전 대화의 설정을 이어받는다 (계획서 2.1.1절).
+
+    **빈 대화는 만들지 않는다** (계획서 2.4절, 세션 5 실사용 후 추가).
+    지금 대화가 이미 비어 있으면 새로 만들지 않고 그 대화의 모델만 바꾼다.
+    빈 대화는 언제나 최대 1개다.
+    """
+    current = active_conversation()
+    if current is not None and current.is_empty:
+        switch_model_in_place(current, model_id)
+        return current
     return add_conversation(
         new_conversation(model_id, inherit=inherit_from.settings if inherit_from else None)
     )
 
 
+def switch_model_in_place(conv: Conversation, model_id: str) -> list[str]:
+    """대화를 유지한 채 모델만 바꾼다.
+
+    빈 대화의 계열 전환(계획서 2.4절)과 계열 내 전환(2.6.1.1절)에 쓴다.
+    계열이 달라지면 예산도 새 모델 기본값으로 맞춘다 — 이력이 없으니 절단 걱정이 없다.
+    """
+    spec = get_model(model_id)
+    changed_family = get_model(conv.model_id).family != spec.family
+    conv.model_id = spec.id
+    notes = adopt_model(conv.settings, spec.id)
+    if changed_family:
+        conv.settings.context_budget = spec.default_context_budget
+    return notes
+
+
 def append_message(conv: Conversation, message: Message) -> None:
     """메시지를 붙이고 제목·수정 시각을 갱신한다."""
     conv.messages.append(message)
-    if message.role == "user" and conv.title == DEFAULT_TITLE:
+    if message.role == "user" and conv.title == DEFAULT_TITLE and not conv.title_customized:
         conv.title = title_from_first_message(message.content)
     conv.touch()
+
+
+def rename_conversation(conv: Conversation, title: str) -> None:
+    """사용자가 지정한 제목. 이후로는 자르지 않는다 (계획서 2.4절)."""
+    cleaned = " ".join(title.split())
+    if cleaned:
+        conv.title = cleaned
+        conv.title_customized = True
+    else:
+        conv.title = DEFAULT_TITLE
+        conv.title_customized = False
 
 
 def recent_conversations() -> list[Conversation]:

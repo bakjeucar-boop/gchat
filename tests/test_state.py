@@ -17,6 +17,7 @@ from gchat.state import (
     adopt_model,
     new_conversation,
     remove_conversation,
+    shorten_title,
     sort_by_recent,
     title_from_first_message,
 )
@@ -32,11 +33,18 @@ def test_짧은_메시지는_그대로_제목이_된다():
     assert title_from_first_message("인버터 용량 산정") == "인버터 용량 산정"
 
 
-def test_30자를_넘으면_자른다():
+def test_제목은_자르지_않고_보관한다():
+    """자르는 것은 표시 단계의 몫이다. 툴팁에 전체를 보여줘야 한다 (계획서 2.4절)."""
     text = "가" * 50
-    title = title_from_first_message(text)
-    assert len(title) == TITLE_LIMIT + 1  # 말줄임표 한 글자
-    assert title.endswith("…")
+    assert title_from_first_message(text) == text
+
+
+def test_목록_표시용으로_20자에서_줄인다():
+    assert TITLE_LIMIT == 20
+    shortened = shorten_title("가" * 50)
+    assert len(shortened) == TITLE_LIMIT + 1  # 말줄임표 한 글자
+    assert shortened.endswith("…")
+    assert shorten_title("짧은 제목") == "짧은 제목"
 
 
 def test_줄바꿈과_연속_공백은_한_줄로_눌린다():
@@ -48,9 +56,9 @@ def test_빈_입력은_기본_제목을_쓴다():
     assert title_from_first_message("   \n  ") == DEFAULT_TITLE
 
 
-def test_경계_길이는_자르지_않는다():
+def test_경계_길이는_줄이지_않는다():
     text = "가" * TITLE_LIMIT
-    assert title_from_first_message(text) == text
+    assert shorten_title(text) == text
 
 
 # --- 목록 정렬·삭제 ----------------------------------------------------------------
