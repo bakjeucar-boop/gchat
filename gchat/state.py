@@ -55,6 +55,8 @@ class Message:
     latency_s: float | None = None
     # 출력 한도로 잘렸는가 (계획서 2.8절 — "계속" 안내를 붙인다)
     truncated_output: bool = False
+    # 사용자가 멈춤 버튼으로 끊었는가 (세션 6 추가 — 계획서 2.4절 구조에는 없다)
+    stopped_by_user: bool = False
 
 
 @dataclass

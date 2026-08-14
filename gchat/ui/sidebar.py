@@ -1,11 +1,12 @@
-"""사이드바 (계획서 2.6.3절 순서 그대로).
+"""사이드바.
 
-1. 새 대화  2. 설정  3. 대화 목록  4. 한도 게이지  5. 일괄 삭제
-6. 휘발성 경고  7. Markdown 내보내기
+세션 6 실사용 피드백으로 순서를 정했다 (계획서 2.6.3절과 다르다).
 
-6·7 을 붙여 두는 것이 핵심이다 — 경고를 읽은 자리에서 바로 내려받을 수 있다.
-세션 4 에서는 경고가 맨 위였으나, 정작 할 수 있는 일이 맨 아래라 동선이
-어긋난다는 실사용 피드백으로 옮겼다 (계획서 2.4절).
+1. 새 대화  2. 대화 목록  3. Markdown 내보내기  4. 전체 삭제
+5. 한도 게이지  6. 설정 (접힘)
+
+휘발성 경고는 사용자 요청으로 화면에서 내렸다. 계획서 2.4절은 상시 노출을
+요구하므로 되살릴 때를 위해 문구 상수만 남겨 둔다.
 """
 
 from __future__ import annotations
@@ -72,7 +73,9 @@ def _render_conversations() -> None:
     active_id = state.active_conversation().id if state.active_conversation() else None
 
     for conv in conversations:
-        open_col, edit_col, delete_col = st.columns([6, 1, 1], vertical_alignment="center")
+        # 아이콘 칸을 좁게 잡으면 버튼 상자가 이모지를 다 담지 못해 밖으로 삐져
+        # 나온다 (세션 6 피드백). 여유를 주고 두 버튼 다 칸을 채우게 한다.
+        open_col, edit_col, delete_col = st.columns([5, 1.4, 1.4], vertical_alignment="center")
         marker = "● " if conv.id == active_id else ""
         # 계획서 2.4절 — 목록은 훑어보는 곳이므로 작은 글씨로, 전체 제목은 툴팁으로.
         tooltip = (
@@ -90,13 +93,13 @@ def _render_conversations() -> None:
 
         # popover 는 라벨 옆에 아래꺾쇠가 붙어 보기 나빴다. 눌러서 펼치는
         # 인라인 편집으로 바꾼다 (세션 6 피드백).
-        if edit_col.button("✏️", key=f"edit_{conv.id}", help="제목 변경"):
+        if edit_col.button("✏️", key=f"edit_{conv.id}", help="제목 변경", width="stretch"):
             st.session_state[S_EDITING_TITLE] = (
                 None if st.session_state.get(S_EDITING_TITLE) == conv.id else conv.id
             )
             st.rerun()
 
-        if delete_col.button("🗑", key=f"delete_{conv.id}", help="이 대화 삭제"):
+        if delete_col.button("🗑", key=f"delete_{conv.id}", help="이 대화 삭제", width="stretch"):
             state.delete_conversation(conv.id)
             st.rerun()
 

@@ -28,11 +28,14 @@ from gchat.client import (
     StreamResult,
 )
 from gchat.context import fit_to_budget, single_input_too_large, too_large_message
-from gchat.models import default_model
+from gchat.models import PURPOSE_CUSTOM, default_model
 from gchat.quota import QuotaBook, Verdict, VerdictKind
 from gchat.state import Conversation, Message
 
 S_AUTOSEND = "chat_autosend"
+# 스트리밍 도중 받은 조각을 쌓아 둔다. 멈춤 버튼을 누르면 실행이 통째로
+# 중단되므로, 여기에 남겨 두지 않으면 그때까지 받은 답이 사라진다 (세션 6).
+S_PARTIAL = "chat_partial_text"
 
 
 def render_history(conv: Conversation) -> None:
@@ -46,6 +49,9 @@ def render_input(client: GeminiClient | None, book: QuotaBook, conv: Conversatio
         st.chat_input("API 키가 없어 전송할 수 없습니다", disabled=True)
         return
 
+    # 멈춤 버튼으로 실행이 끊겼다면, 그때까지 받은 답을 먼저 대화에 남긴다.
+    _commit_interrupted(conv)
+
     prompt = st.chat_input("메시지를 입력하세요")
     if prompt:
         state.clear_deleted()
@@ -57,20 +63,57 @@ def render_input(client: GeminiClient | None, book: QuotaBook, conv: Conversatio
         _send(conv, client, book)
 
 
+def _commit_interrupted(conv: Conversation) -> None:
+    """멈춤으로 끊긴 답을 살려 둔다 (세션 6).
+
+    멈춤 버튼은 리런을 일으켜 실행 중인 스크립트를 통째로 중단시킨다. 그래서
+    성공 경로의 append_message 가 돌지 않는다. 쌓아 둔 조각을 여기서 붙인다.
+    """
+    partial = st.session_state.get(S_PARTIAL, "")
+    if not partial or not _awaiting_reply(conv):
+        st.session_state[S_PARTIAL] = ""
+        return
+    state.append_message(
+        conv,
+        Message(
+            role="model",
+            content=partial,
+            model_id=state.active_model_id(),
+            stopped_by_user=True,
+        ),
+    )
+    st.session_state[S_PARTIAL] = ""
+
+
 def _awaiting_reply(conv: Conversation) -> bool:
     """마지막이 사용자 메시지면 아직 답하지 않은 것이다."""
     return bool(conv.messages) and conv.messages[-1].role == "user"
 
 
+def _capture(chunks):
+    """조각을 세션에 쌓으면서 흘려보낸다. 멈춤으로 끊겨도 남는다."""
+    st.session_state[S_PARTIAL] = ""
+    for chunk in chunks:
+        st.session_state[S_PARTIAL] += chunk
+        yield chunk
+
+
 def _render_header(conv: Conversation) -> None:
-    """대화 제목과, 설정되어 있으면 시스템 인스트럭션 한 줄 요약 (계획서 2.6.2절)."""
-    st.caption(conv.title)
+    """커스텀 인스트럭션이 있을 때만 한 줄 요약을 보인다 (계획서 2.6.2절).
+
+    대화 제목은 사이드바 목록에 이미 있다. 제목이 첫 질문에서 자동 생성되므로
+    본문 위에 또 쓰면 같은 문장이 두 번 보인다 (세션 6 피드백).
+    범용·코딩 프리셋 문구도 굳이 매번 보일 이유가 없다.
+    """
+    if conv.settings.purpose != PURPOSE_CUSTOM:
+        return
     instruction = conv.settings.system_instruction.strip()
-    if instruction:
-        summary = " ".join(instruction.split())
-        if len(summary) > 60:
-            summary = summary[:60] + "…"
-        st.caption(f"🧭 {summary}")
+    if not instruction:
+        return
+    summary = " ".join(instruction.split())
+    if len(summary) > 60:
+        summary = summary[:60] + "…"
+    st.caption(f"🧭 {summary}")
 
 
 def _render_messages(conv: Conversation) -> None:
@@ -145,6 +188,8 @@ def _render_message_meta(message: Message) -> None:
     if message.truncated_output:
         # 계획서 2.8절 — 출력 토큰 슬라이더는 UI 에 없다. "계속" 으로 이어받는다.
         st.info("출력 한도로 잘렸습니다. '계속'이라고 입력하면 이어서 답합니다.")
+    if message.stopped_by_user:
+        st.info("멈춤 버튼으로 중단했습니다. '계속'이라고 입력하면 이어서 답합니다.")
 
 
 def _send(conv: Conversation, client: GeminiClient, book: QuotaBook) -> None:
@@ -183,16 +228,24 @@ def _send(conv: Conversation, client: GeminiClient, book: QuotaBook) -> None:
     entry = tracker.record_sent(trim.tokens)  # 창의 기준은 전송 시각이다
     started = time.monotonic()
     result = StreamResult()
+
+    # 멈춤 버튼은 스트림 **앞에** 그려야 화면에 먼저 나온다. 누르면 리런이 걸려
+    # 실행 중인 스크립트가 중단된다 — 별도 처리기가 필요 없다.
+    # 모델이 같은 글자를 되풀이하는 경우를 끊는 용도다 (세션 6 피드백).
+    st.button("⏹ 멈춤", key=f"stop_{conv.id}_{len(conv.messages)}", help="생성을 중단합니다")
+
     with st.chat_message("assistant"):
         try:
-            st.write_stream(client.stream(model_id, trim.messages, conv.settings, result))
+            st.write_stream(_capture(client.stream(model_id, trim.messages, conv.settings, result)))
         except GchatApiError as exc:
+            st.session_state[S_PARTIAL] = ""
             tracker.record_usage_from(result.usage, entry)
             if isinstance(exc, RateLimited):
                 tracker.apply_rate_limit(exc)
             _render_error(exc, conv, book, model_id, trim.tokens)
             return
 
+    st.session_state[S_PARTIAL] = ""
     tracker.record_usage_from(result.usage, entry)
     state.append_message(
         conv,
