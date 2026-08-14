@@ -13,14 +13,20 @@ import pytest
 from gchat.models import (
     FAMILY_GEMINI3,
     FAMILY_GEMMA4,
+    GEMMA_CODING_INSTRUCTION,
     GEMMA_DEFAULT_INSTRUCTION,
     MODELS,
     MODELS_BY_ID,
+    PURPOSE_CODING,
+    PURPOSE_GENERAL,
+    PURPOSE_INSTRUCTIONS,
     SAFETY_MARGIN,
     THINKING_LABELS,
     ModelSpec,
+    compose_instruction,
     default_model,
     get_model,
+    length_instruction,
     max_request_tokens,
     model_ids,
     models_in_family,
@@ -40,8 +46,8 @@ EXPECTED_LIMITS = {
 # Gemma 는 세션 4 실사용 후 3,000·768 에서 상향됐다.
 EXPECTED_BUDGETS = {
     "gemini-3.5-flash-lite": (32_000, 4_096),
-    "gemma-4-31b-it": (9_000, 2_048),
-    "gemma-4-26b-a4b-it": (9_000, 2_048),
+    "gemma-4-31b-it": (9_000, 4_096),
+    "gemma-4-26b-a4b-it": (9_000, 4_096),
 }
 
 # 세션 2 실측 (models.get) — (context_window, max_output_tokens)
@@ -211,6 +217,23 @@ def test_Gemma는_간결하게_쓰라는_기본_인스트럭션을_갖는다(spe
     # 세션 5 재개정의 핵심은 하한 지시다. 상한만 주면 모델이 계속 아래로 내려간다.
     assert "너무 짧게 줄이지 말고" in instruction
     assert "1,600~2,400자" in instruction  # = 1,000~1,500 토큰 (2.2절 상수 1.6자/토큰)
+
+
+def test_코딩_용도에서는_글자수_목표를_주지_않는다():
+    """세션 6 실사용 — 1,600~2,400자에 맞추려다 코드가 끊겼다."""
+    coding = compose_instruction("gemma-4-31b-it", PURPOSE_CODING)
+    assert "1,600~2,400자" not in coding
+    assert GEMMA_CODING_INSTRUCTION in coding
+    assert PURPOSE_INSTRUCTIONS[PURPOSE_CODING] in coding
+
+    # 범용은 그대로 글자 수 목표를 준다
+    general = compose_instruction("gemma-4-31b-it", PURPOSE_GENERAL)
+    assert GEMMA_DEFAULT_INSTRUCTION in general
+
+
+def test_Gemini에는_길이_지시를_주지_않는다():
+    for purpose in (PURPOSE_GENERAL, PURPOSE_CODING):
+        assert length_instruction("gemini-3.5-flash-lite", purpose) == ""
 
 
 def test_기본_인스트럭션은_모델_테이블에만_있다():

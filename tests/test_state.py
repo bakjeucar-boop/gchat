@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from gchat.models import (
+    GEMMA_CODING_INSTRUCTION,
     GEMMA_DEFAULT_INSTRUCTION,
     PURPOSE_CODING,
     PURPOSE_CUSTOM,
@@ -146,7 +147,12 @@ def test_용도를_바꾸면_문구가_다시_조합된다():
     settings = new_conversation(GEMMA).settings
     set_purpose(settings, GEMMA, PURPOSE_CODING)
     assert PURPOSE_INSTRUCTIONS[PURPOSE_CODING] in settings.system_instruction
-    assert GEMMA_DEFAULT_INSTRUCTION in settings.system_instruction  # 길이 지시는 남는다
+    # 코딩에서는 글자 수 목표 대신 "코드를 온전히" 지시가 들어간다 (세션 6)
+    assert GEMMA_DEFAULT_INSTRUCTION not in settings.system_instruction
+    assert GEMMA_CODING_INSTRUCTION in settings.system_instruction
+
+    set_purpose(settings, GEMMA, PURPOSE_GENERAL)
+    assert GEMMA_DEFAULT_INSTRUCTION in settings.system_instruction
 
 
 def test_커스텀으로_바꾸면_지금_문구를_이어서_고칠_수_있다():

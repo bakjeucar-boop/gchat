@@ -18,6 +18,7 @@ from gchat import state
 from gchat.context import count_excluded, estimate_messages, estimate_tokens
 from gchat.models import (
     FAMILY_GEMMA4,
+    PURPOSE_CODING,
     PURPOSE_CUSTOM,
     PURPOSE_GENERAL,
     PURPOSES,
@@ -127,6 +128,18 @@ def _render_thinking(spec: ModelSpec, conv: Conversation) -> None:
     )
 
 
+def _tokens_per_turn(spec: ModelSpec, purpose: str) -> int:
+    """턴당 컨텍스트 증가 추정.
+
+    범용은 계획서 1.5절 값(1,750)을 쓴다 — 세션 6 실측(출력 약 1,300 + 입력 약
+    200)과 비슷하다. 코딩은 길이 지시를 주지 않아 출력이 상한까지 가는 일이
+    잦으므로 상한 기준으로 잡는다. 그래야 "약 N턴"이 거짓말이 되지 않는다.
+    """
+    if purpose == PURPOSE_CODING:
+        return spec.default_max_output + 200
+    return TOKENS_PER_TURN
+
+
 def _render_budget(spec: ModelSpec, conv: Conversation) -> None:
     """Gemma 일 때만. 슬라이더 옆에는 대기 시간이 아니라 **턴 수**를 보인다."""
     ceiling = max_request_tokens(spec.id)  # TPM 의 90% — 테이블에서 유도한다
@@ -142,7 +155,8 @@ def _render_budget(spec: ModelSpec, conv: Conversation) -> None:
     )
     conv.settings.context_budget = chosen
 
-    st.caption(f"약 {max(1, chosen // TOKENS_PER_TURN)}턴 유지 (턴당 약 {TOKENS_PER_TURN:,} 토큰)")
+    per_turn = _tokens_per_turn(spec, conv.settings.purpose)
+    st.caption(f"약 {max(1, chosen // per_turn)}턴 유지 (턴당 약 {per_turn:,} 토큰)")
 
     if chosen > WAIT_FREE_BUDGET:
         st.warning(f"{WAIT_FREE_BUDGET:,}부터는 요청 사이에 대기가 생깁니다.", icon="⚠️")

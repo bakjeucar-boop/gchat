@@ -72,6 +72,13 @@ GEMMA_DEFAULT_INSTRUCTION = (
     "서론·맺음말은 넣지 않는다."
 )
 
+# 코딩 용도에서는 글자 수 목표를 주지 않는다 (세션 6 실사용).
+# 1,600~2,400자 안에 코드를 맞추려다 보면 코드가 중간에서 끊긴다.
+GEMMA_CODING_INSTRUCTION = (
+    "코드는 생략 없이 완전한 형태로 쓴다. 길이를 맞추려고 코드를 줄이거나 "
+    "'...' 로 생략하지 않는다. 설명은 코드 아래에 짧게 붙인다."
+)
+
 # 용도 프리셋 (세션 6 실사용 요청). 모델과 무관하게 대화의 성격을 정한다.
 # 최종 인스트럭션 = 용도 문구 + 모델별 길이 지시(위 default_system_instruction).
 PURPOSE_GENERAL = "general"
@@ -105,14 +112,29 @@ def purpose_label(purpose: str) -> str:
     return PURPOSE_LABELS.get(purpose, purpose)
 
 
+def length_instruction(model_id: str, purpose: str) -> str:
+    """모델·용도별 길이 지시 (세션 6).
+
+    Gemini 는 자연 길이가 적당해 아무것도 주지 않는다.
+    Gemma 는 범용에서 글자 수 목표를 주지만, **코딩에서는 주지 않는다** —
+    목표에 맞추려다 코드가 중간에서 끊기기 때문이다 (세션 6 실사용).
+    """
+    spec = get_model(model_id)
+    if not spec.default_system_instruction:
+        return ""
+    if purpose == PURPOSE_CODING:
+        return GEMMA_CODING_INSTRUCTION
+    return spec.default_system_instruction
+
+
 def compose_instruction(model_id: str, purpose: str) -> str:
     """용도 문구에 모델별 길이 지시를 이어붙인다 (세션 6 결정).
 
-    길이 지시를 빼면 Gemma 답변이 다시 3,000토큰으로 튀어 상한에서 잘린다
-    (세션 5·6 실측, docs/api_findings.md B-8·B-9). 용도가 바뀌어도 이 부분은 남는다.
-    Gemini 는 길이 지시가 없으므로 용도 문구만 들어간다.
+    길이 지시를 빼면 Gemma 답변이 3,000토큰으로 튀어 상한에서 잘린다
+    (세션 5·6 실측, docs/api_findings.md B-8·B-9). 용도가 바뀌어도 이 자리는
+    비우지 않고, 코딩에서는 코드를 온전히 쓰라는 지시로 갈아끼운다.
     """
-    parts = [PURPOSE_INSTRUCTIONS.get(purpose, ""), get_model(model_id).default_system_instruction]
+    parts = [PURPOSE_INSTRUCTIONS.get(purpose, ""), length_instruction(model_id, purpose)]
     return "\n\n".join(part for part in parts if part)
 
 
@@ -164,10 +186,10 @@ MODELS: tuple[ModelSpec, ...] = (
         # TPM 은 실제로 걸리지 않았다 — 6턴 내내 대기 0회, 창 사용률 29%.
         # 예산 9,000 의 TPM상 최소 간격 37.5초 < 출력 1,536 의 생성 시간 약 50초.
         default_context_budget=9_000,
-        # 768 → 1,536 → 2,048 (세션 5 후 재상향). 목표 답변이 1,000~1,500토큰이라
-        # 1,536 은 목표 상단과 너무 가까워 잘림이 생겼다. 이 값은 안전장치이고
-        # 실제 길이를 정하는 것은 default_system_instruction 이다 (계획서 2.6.2절).
-        default_max_output=2_048,
+        # 768 → 1,536 → 2,048 → 4,096 (세션 6 코딩 피드백으로 재상향).
+        # 코딩 답변은 코드가 길어 2,048 에서 잘렸다. 이 값은 안전장치이고
+        # 실제 길이를 정하는 것은 용도별 길이 지시다 (계획서 2.6.2절).
+        default_max_output=4_096,
         price_in_per_mtok=None,
         price_out_per_mtok=None,
     ),
@@ -186,7 +208,7 @@ MODELS: tuple[ModelSpec, ...] = (
         context_window=262_144,
         limits=RateLimits(rpm=30, tpm=16_000, rpd=14_400),
         default_context_budget=9_000,
-        default_max_output=2_048,
+        default_max_output=4_096,
         price_in_per_mtok=None,
         price_out_per_mtok=None,
     ),
