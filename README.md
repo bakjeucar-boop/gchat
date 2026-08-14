@@ -44,7 +44,21 @@ ruff check .
 python scripts/probe_models.py sdk
 ```
 
+## 배포 (Streamlit Community Cloud)
+
+1. GitHub 저장소에 push (`.streamlit/secrets.toml`은 커밋되지 않는다)
+2. Streamlit Cloud 에서 앱 생성 — main 파일은 `app.py`
+3. 앱 설정 화면의 Secrets 에 아래를 등록한다
+
+```toml
+GEMINI_API_KEY = "..."
+APP_PASSWORD = "..."
+```
+
+비공개 앱 슬롯이 이미 차 있으면 저장소가 공개된다. secrets 는 저장소에 없으므로
+키는 안전하다. 12시간 무접속 시 앱이 대기 상태가 되고, 깨어나면 대화가 모두
+사라진다 — v1 의 설계 결과다 (계획서 6절).
+
 ## 상태
 
-세션 2 완료 — 골격 · 모델 테이블(실측 반영) · 인증 게이트 · Gemini 래퍼(`client.py`).
-채팅 화면은 세션 4부터.
+세션 6 완료 — 대화·한도 관리·컨트롤·Markdown 내보내기까지 동작한다.
