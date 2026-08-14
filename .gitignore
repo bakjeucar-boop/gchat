@@ -18,3 +18,6 @@ __pycache__/
 .idea/
 Thumbs.db
 desktop.ini
+
+# Claude Code 실행 설정 (계획서 3절 구조 밖의 도구 파일)
+.claude/

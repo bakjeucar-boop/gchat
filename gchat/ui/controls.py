@@ -155,10 +155,11 @@ def _render_budget(spec: ModelSpec, conv: Conversation) -> None:
 def _render_system_instruction(spec: ModelSpec, conv: Conversation) -> None:
     """모델 기본값을 화면에 그대로 채워 보인다 (계획서 2.6.2절)."""
     settings = conv.settings
+    widget_key = f"sysinst_{conv.id}_{spec.id}"
     value = st.text_area(
         "시스템 인스트럭션",
         value=settings.system_instruction,
-        key=f"sysinst_{conv.id}_{spec.id}",
+        key=widget_key,
         height=120,
         help="비워두면 사용하지 않습니다. 컨텍스트에 영향이 없어 대화 중 바꿔도 안전합니다.",
     )
@@ -168,19 +169,35 @@ def _render_system_instruction(spec: ModelSpec, conv: Conversation) -> None:
         settings.system_instruction_customized = value != spec.default_system_instruction
 
     if settings.system_instruction_customized and spec.default_system_instruction:
-        if st.button("모델 기본값으로 되돌리기", key=f"reset_sysinst_{conv.id}_{spec.id}"):
-            settings.system_instruction = spec.default_system_instruction
-            settings.system_instruction_customized = False
-            st.rerun()
+        # 콜백으로 처리한다. 위젯이 그려진 뒤에는 그 키를 대입할 수 없어서,
+        # settings 만 고치면 화면의 입력칸이 옛 값을 그대로 들고 있게 된다.
+        st.button(
+            "모델 기본값으로 되돌리기",
+            key=f"reset_sysinst_{conv.id}_{spec.id}",
+            on_click=_reset_instruction,
+            args=(settings, spec.default_system_instruction, widget_key),
+        )
     elif spec.default_system_instruction:
         st.caption("이 모델의 기본값입니다. 고치면 모델을 바꿔도 유지됩니다.")
+
+
+def _reset_instruction(settings, default: str, widget_key: str) -> None:
+    settings.system_instruction = default
+    settings.system_instruction_customized = False
+    st.session_state[widget_key] = default
 
 
 # --- 계열 전환 확인 (계획서 2.1.1절) ------------------------------------------------
 
 
 def render_family_confirmation(conv: Conversation, *, export_button=None) -> None:
-    """본문 위쪽에 띄운다. 사이드바보다 눈에 잘 띄고 3버튼이 들어갈 자리가 넉넉하다."""
+    """본문 위쪽에 띄운다. 사이드바보다 눈에 잘 띄고 3버튼이 들어갈 자리가 넉넉하다.
+
+    두 버튼 모두 **on_click 콜백**으로 처리한다. 확정도 취소도 selectbox 의 키
+    (`ui_model_id`)를 되돌려야 하는데, 위젯이 이미 그려진 뒤에 그 키를 대입하면
+    StreamlitAPIException 이 난다. 콜백은 다음 실행의 위젯 생성 **전**에 돌아서
+    대입이 허용된다.
+    """
     pending = state.pending_model_id()
     if pending is None:
         return
@@ -197,15 +214,24 @@ def render_family_confirmation(conv: Conversation, *, export_button=None) -> Non
             export_button(conv)
         else:
             st.button("Markdown으로 저장", disabled=True, width="stretch")
-    if go_col.button("저장했음 · 전환", type="primary", width="stretch"):
-        state.commit_model_selection(pending)
-        state.start_conversation(pending, inherit_from=conv)
-        _remember([f"{target.label}로 전환하고 새 대화를 시작했습니다."])
-        st.rerun()
-    if cancel_col.button("취소", width="stretch"):
-        # 드롭다운을 이전 모델로 되돌린다 (계획서 2.1.1절 구현 주의).
-        state.revert_model_selection()
-        st.rerun()
+    go_col.button(
+        "저장했음 · 전환",
+        type="primary",
+        width="stretch",
+        on_click=_confirm_family_switch,
+        args=(conv, pending, target.label),
+    )
+    cancel_col.button(
+        "취소",
+        width="stretch",
+        on_click=state.revert_model_selection,  # 드롭다운을 이전 모델로 되돌린다
+    )
+
+
+def _confirm_family_switch(conv: Conversation, model_id: str, label: str) -> None:
+    state.commit_model_selection(model_id)
+    state.start_conversation(model_id, inherit_from=conv)
+    _remember([f"{label}로 전환하고 새 대화를 시작했습니다."])
 
 
 # --- 안내 문구 전달 -----------------------------------------------------------------
