@@ -14,7 +14,7 @@ from gchat import state
 from gchat.auth import check_password, get_secret
 from gchat.client import GchatApiError, GeminiClient
 from gchat.quota import QuotaBook
-from gchat.ui import chat, controls, sidebar
+from gchat.ui import chat, controls, export_ui, sidebar
 
 SECRET_KEY_API = "GEMINI_API_KEY"
 S_QUOTA_BOOK = "quota_book"
@@ -65,9 +65,15 @@ if client is None:
 # 순서가 화면 배치다 (계획서 2.6절).
 # 조작은 사이드바 설정, 본문은 확인 블록 → 대화 이력 → 표시 전용 배지 → 입력창.
 conversation = state.ensure_conversation()
-sidebar.render(book, conversation)
+sidebar.render(
+    book,
+    conversation,
+    export_section=lambda: export_ui.render_sidebar_export(conversation),
+)
 
-controls.render_family_confirmation(conversation)
+controls.render_family_confirmation(
+    conversation, export_button=export_ui.render_confirmation_export
+)
 controls.drain_notes()
 chat.render_history(conversation)
 controls.render_badge(book, conversation)
