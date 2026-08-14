@@ -9,9 +9,11 @@
 
 from __future__ import annotations
 
+import json
 import time
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from gchat import state
 from gchat.client import (
@@ -87,20 +89,47 @@ def _render_messages(conv: Conversation) -> None:
 
 
 def _render_copy(conv: Conversation, index: int, message: Message) -> None:
-    """메시지 단위 복사 (계획서 2.4.1절).
+    """메시지 단위 복사 — 한 번 눌러 바로 복사된다 (계획서 2.4.1절).
 
     복사되는 것은 렌더링된 HTML 이 아니라 **원본 Markdown** 이다. 코드 블록·
     목록·표가 살아 있어야 다른 곳에 붙일 때 쓸모가 있다. 토큰 수·지연 시간
     같은 메타 정보는 넣지 않는다.
 
-    구현은 st.code 방식이다. Streamlit 이 코드 블록에 복사 아이콘을 붙여주므로
-    자바스크립트 없이 같은 목적을 달성한다. 평소에는 접어 둔다.
+    세션 6 피드백으로 st.code 대안(펼쳐서 다시 아이콘을 누르는 2단계)에서
+    navigator.clipboard 한 번 클릭으로 바꿨다. Streamlit 컴포넌트 iframe 에는
+    clipboard-write 권한이 실제로 부여되어 있다 (docs/api_findings.md B-9).
     """
     if not message.content.strip():
         return
-    with st.popover("📋 복사", help="원본 Markdown 을 복사합니다"):
-        st.caption("오른쪽 위 복사 아이콘을 누르세요.")
-        st.code(message.content, language=None, wrap_lines=True)
+    payload = json.dumps(message.content)
+    components.html(
+        f"""
+        <style>
+          body {{ margin: 0; background: transparent; }}
+          button {{
+            font: 400 12px/1 "Source Sans Pro", sans-serif;
+            color: rgba(128,128,128,.9);
+            background: transparent; border: 1px solid rgba(128,128,128,.35);
+            border-radius: 6px; padding: 4px 9px; cursor: pointer;
+          }}
+          button:hover {{ color: #ff4b4b; border-color: #ff4b4b; }}
+        </style>
+        <button id="c">📋 복사</button>
+        <script>
+          const btn = document.getElementById("c");
+          btn.onclick = async () => {{
+            try {{
+              await navigator.clipboard.writeText({payload});
+              btn.textContent = "✅ 복사됨";
+            }} catch (e) {{
+              btn.textContent = "복사 실패 — " + e.name;
+            }}
+            setTimeout(() => {{ btn.textContent = "📋 복사"; }}, 1500);
+          }};
+        </script>
+        """,
+        height=34,
+    )
 
 
 def _render_message_meta(message: Message) -> None:

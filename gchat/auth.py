@@ -96,7 +96,9 @@ def check_password() -> bool:
     if verify_password(entered, expected):
         st.session_state[S_AUTHED] = True
         st.session_state[S_FAILED_ATTEMPTS] = 0
-        return True
+        # 이 실행에서는 입력 폼이 이미 그려진 뒤다. 그대로 이어가면 폼 아래에
+        # 채팅 화면이 붙어 비밀번호 칸이 남는다. 다시 그려서 폼을 지운다.
+        st.rerun()
 
     failed += 1
     st.session_state[S_FAILED_ATTEMPTS] = failed

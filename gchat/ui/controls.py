@@ -64,9 +64,8 @@ def render_badge(book: QuotaBook, conv: Conversation) -> None:
 
 
 def render_settings(conv: Conversation) -> None:
-    """조작 컨트롤 4종. 대화가 하나도 없는 첫 화면에서는 펼쳐 둔다."""
-    expanded = conv.is_empty and len(state.conversations()) <= 1
-    with st.expander("설정", expanded=expanded):
+    """조작 컨트롤. 사이드바 맨 아래에 접힌 채로 둔다 (세션 6 피드백)."""
+    with st.expander("설정", expanded=False):
         spec = state.active_model()
         _render_model(conv)
         _render_thinking(spec, conv)

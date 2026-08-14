@@ -20,10 +20,14 @@ from gchat.quota import QuotaBook
 from gchat.state import Conversation
 from gchat.ui import controls
 
+# 계획서 2.4절은 휘발성 경고를 상시 노출하라고 하지만, 세션 6 실사용에서
+# 빼 달라는 요청을 받아 화면에서는 내렸다. 문구는 되살릴 때를 위해 남겨 둔다.
 VOLATILE_WARNING = (
     "⚠️ 대화는 이 세션에서만 유지됩니다. 새로고침하면 사라집니다.\n\n"
     "남기려면 아래에서 Markdown으로 내려받으세요."
 )
+
+S_EDITING_TITLE = "editing_title_id"
 
 
 def render(
@@ -32,20 +36,20 @@ def render(
     *,
     export_section: Callable[[], None] | None = None,
 ) -> None:
+    """세션 6 실사용 피드백으로 순서를 바꿨다.
+
+    새 대화 → 대화 목록 → 내보내기 2종 → 전체 삭제 → 한도 → 설정(접힘).
+    계획서 2.6.3절과 다르며, 휘발성 경고도 사용자 요청으로 뺐다.
+    """
     with st.sidebar:
         _render_new_conversation()
-        controls.render_settings(conv)
         _render_conversations()
         _render_undo()
-        _render_quota(book)
-        _render_bulk_delete()
-
-        # 계획서 2.4절 — 경고와 대응 수단(내보내기)을 붙여 둔다.
-        st.warning(VOLATILE_WARNING)
         if export_section is not None:
             export_section()
-        else:
-            st.caption("Markdown 내보내기는 세션 6에서 붙습니다.")
+        _render_bulk_delete()
+        _render_quota(book)
+        controls.render_settings(conv)
 
 
 def _render_new_conversation() -> None:
@@ -84,17 +88,38 @@ def _render_conversations() -> None:
             st.session_state[state.S_ACTIVE_CONVERSATION] = conv.id
             st.rerun()
 
-        with edit_col.popover("✏️", help="제목 변경"):
-            new_title = st.text_input(
-                "제목", value=conv.title, key=f"title_{conv.id}", max_chars=60
+        # popover 는 라벨 옆에 아래꺾쇠가 붙어 보기 나빴다. 눌러서 펼치는
+        # 인라인 편집으로 바꾼다 (세션 6 피드백).
+        if edit_col.button("✏️", key=f"edit_{conv.id}", help="제목 변경"):
+            st.session_state[S_EDITING_TITLE] = (
+                None if st.session_state.get(S_EDITING_TITLE) == conv.id else conv.id
             )
-            if st.button("저장", key=f"save_title_{conv.id}"):
-                state.rename_conversation(conv, new_title)
-                st.rerun()
+            st.rerun()
 
         if delete_col.button("🗑", key=f"delete_{conv.id}", help="이 대화 삭제"):
             state.delete_conversation(conv.id)
             st.rerun()
+
+        if st.session_state.get(S_EDITING_TITLE) == conv.id:
+            _render_title_editor(conv)
+
+
+def _render_title_editor(conv) -> None:
+    new_title = st.text_input(
+        "제목",
+        value=conv.title,
+        key=f"title_{conv.id}",
+        max_chars=60,
+        label_visibility="collapsed",
+    )
+    save_col, cancel_col = st.columns(2)
+    if save_col.button("저장", key=f"save_title_{conv.id}", width="stretch"):
+        state.rename_conversation(conv, new_title)
+        st.session_state[S_EDITING_TITLE] = None
+        st.rerun()
+    if cancel_col.button("취소", key=f"cancel_title_{conv.id}", width="stretch"):
+        st.session_state[S_EDITING_TITLE] = None
+        st.rerun()
 
 
 def _render_undo() -> None:
