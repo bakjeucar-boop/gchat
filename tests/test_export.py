@@ -93,7 +93,10 @@ def test_시스템_인스트럭션은_인용_블록으로_들어간다():
 
 
 def test_인스트럭션이_없으면_넣지_않는다():
-    assert "시스템 인스트럭션" not in render_conversation(make_conversation(), moment=MOMENT)
+    conv = make_conversation()
+    conv.settings = Settings(thinking_level="minimal", context_budget=32_000)
+    conv.settings.system_instruction = ""
+    assert "시스템 인스트럭션" not in render_conversation(conv, moment=MOMENT)
 
 
 # --- 코드 블록 (계획서 2.5절) --------------------------------------------------------

@@ -18,10 +18,15 @@ from gchat import state
 from gchat.context import count_excluded, estimate_messages, estimate_tokens
 from gchat.models import (
     FAMILY_GEMMA4,
+    PURPOSE_CUSTOM,
+    PURPOSE_GENERAL,
+    PURPOSES,
     ModelSpec,
+    compose_instruction,
     get_model,
     max_request_tokens,
     model_ids,
+    purpose_label,
     thinking_label,
 )
 from gchat.quota import QuotaBook
@@ -71,7 +76,7 @@ def render_settings(conv: Conversation) -> None:
         _render_thinking(spec, conv)
         if spec.family == FAMILY_GEMMA4:
             _render_budget(spec, conv)
-        _render_system_instruction(spec, conv)
+        _render_purpose(spec, conv)
 
 
 def _render_model(conv: Conversation) -> None:
@@ -151,39 +156,52 @@ def _render_budget(spec: ModelSpec, conv: Conversation) -> None:
             st.info(f"현재 대화에서 {excluded}개 메시지가 컨텍스트에서 제외됩니다.")
 
 
-def _render_system_instruction(spec: ModelSpec, conv: Conversation) -> None:
-    """모델 기본값을 화면에 그대로 채워 보인다 (계획서 2.6.2절)."""
+def _render_purpose(spec: ModelSpec, conv: Conversation) -> None:
+    """용도 프리셋 (세션 6). 커스텀일 때만 인스트럭션 입력칸을 보인다."""
     settings = conv.settings
+    purposes = list(PURPOSES)
+    index = purposes.index(settings.purpose) if settings.purpose in purposes else 0
+    chosen = st.radio(
+        "용도",
+        options=purposes,
+        index=index,
+        format_func=purpose_label,
+        key=f"purpose_{conv.id}_{spec.id}",
+        horizontal=True,
+        help="범용·코딩은 문구가 자동으로 들어갑니다. 직접 쓰려면 커스텀을 고르세요.",
+    )
+    if chosen != settings.purpose:
+        state.set_purpose(settings, spec.id, chosen)
+
+    if settings.purpose != PURPOSE_CUSTOM:
+        return
+
+    # 커스텀일 때만 노출한다. 나머지는 굳이 보여줄 이유가 없다 (세션 6 피드백).
     widget_key = f"sysinst_{conv.id}_{spec.id}"
     value = st.text_area(
         "시스템 인스트럭션",
         value=settings.system_instruction,
         key=widget_key,
-        height=120,
+        height=140,
         help="비워두면 사용하지 않습니다. 컨텍스트에 영향이 없어 대화 중 바꿔도 안전합니다.",
     )
     if value != settings.system_instruction:
         settings.system_instruction = value
-        # 모델 기본값과 같아지면 다시 기본값을 따라간다.
-        settings.system_instruction_customized = value != spec.default_system_instruction
 
-    if settings.system_instruction_customized and spec.default_system_instruction:
-        # 콜백으로 처리한다. 위젯이 그려진 뒤에는 그 키를 대입할 수 없어서,
-        # settings 만 고치면 화면의 입력칸이 옛 값을 그대로 들고 있게 된다.
-        st.button(
-            "모델 기본값으로 되돌리기",
-            key=f"reset_sysinst_{conv.id}_{spec.id}",
-            on_click=_reset_instruction,
-            args=(settings, spec.default_system_instruction, widget_key),
-        )
-    elif spec.default_system_instruction:
-        st.caption("이 모델의 기본값입니다. 고치면 모델을 바꿔도 유지됩니다.")
+    st.button(
+        "용도 기본 문구 가져오기",
+        key=f"reset_sysinst_{conv.id}_{spec.id}",
+        help="범용 문구와 이 모델의 길이 지시를 다시 채웁니다.",
+        on_click=_fill_default_instruction,
+        args=(settings, spec.id, widget_key),
+    )
 
 
-def _reset_instruction(settings, default: str, widget_key: str) -> None:
-    settings.system_instruction = default
-    settings.system_instruction_customized = False
-    st.session_state[widget_key] = default
+def _fill_default_instruction(settings, model_id: str, widget_key: str) -> None:
+    """콜백에서 처리한다. 위젯이 그려진 뒤에는 그 키를 대입할 수 없다."""
+    text = compose_instruction(model_id, PURPOSE_GENERAL)
+    settings.system_instruction = text
+    st.session_state[widget_key] = text
 
 
 # --- 계열 전환 확인 (계획서 2.1.1절) ------------------------------------------------

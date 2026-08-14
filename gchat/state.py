@@ -13,7 +13,10 @@ from datetime import datetime, timedelta, timezone
 import streamlit as st
 
 from gchat.models import (
+    PURPOSE_CUSTOM,
+    PURPOSE_GENERAL,
     ModelSpec,
+    compose_instruction,
     default_model,
     get_model,
     resolve_thinking_level,
@@ -65,9 +68,14 @@ class Settings:
     thinking_level: str
     context_budget: int
     system_instruction: str = ""
-    # 사용자가 인스트럭션을 직접 손댄 적이 있는가 (계획서 2.6.2절).
-    # True 면 모델을 바꿔도 모델 기본값으로 덮어쓰지 않는다.
-    system_instruction_customized: bool = False
+    # 용도 프리셋 (세션 6). 범용·코딩은 문구가 자동으로 채워지고 화면에 숨긴다.
+    # 커스텀일 때만 사용자가 직접 쓰고 입력칸이 보인다.
+    purpose: str = PURPOSE_GENERAL
+
+    @property
+    def system_instruction_customized(self) -> bool:
+        """사용자가 직접 쓴 인스트럭션인가 (계획서 2.6.2절의 플래그를 대체)."""
+        return self.purpose == PURPOSE_CUSTOM
 
     @classmethod
     def for_model(cls, spec: ModelSpec, *, inherit: Settings | None = None) -> Settings:
@@ -76,21 +84,21 @@ class Settings:
         계획서 2.1.1절: 새 대화는 직전 대화의 응답 모드를 이어받되, 컨텍스트
         예산은 새 모델의 기본값으로 초기화한다. 응답 모드가 새 모델에 없는
         값이면 minimal 로 되돌린다.
-        계획서 2.6.2절: 시스템 인스트럭션은 사용자가 편집한 값이 있으면 그것을
-        이어받고, 없으면 새 모델의 기본값을 채운다.
+        용도(2.6.2절)도 이어받는다. 커스텀이면 사용자가 쓴 문구를 그대로 두고,
+        아니면 새 모델에 맞춰 다시 조합한다 — 모델별 길이 지시가 달라지기 때문이다.
         """
         level = inherit.thinking_level if inherit else spec.default_thinking_level
-        customized = bool(inherit and inherit.system_instruction_customized)
+        purpose = inherit.purpose if inherit else PURPOSE_GENERAL
         instruction = (
             inherit.system_instruction
-            if customized and inherit
-            else spec.default_system_instruction
+            if inherit and purpose == PURPOSE_CUSTOM
+            else compose_instruction(spec.id, purpose)
         )
         return cls(
             thinking_level=resolve_thinking_level(spec.id, level),
             context_budget=spec.default_context_budget,
             system_instruction=instruction,
-            system_instruction_customized=customized,
+            purpose=purpose,
         )
 
 
@@ -111,10 +119,23 @@ def adopt_model(settings: Settings, model_id: str) -> list[str]:
         settings.thinking_level = resolved
 
     if not settings.system_instruction_customized:
-        if settings.system_instruction != spec.default_system_instruction:
-            settings.system_instruction = spec.default_system_instruction
-            notes.append(f"시스템 인스트럭션을 {spec.label}의 기본값으로 바꿨습니다.")
+        composed = compose_instruction(model_id, settings.purpose)
+        if settings.system_instruction != composed:
+            settings.system_instruction = composed
+            notes.append(f"시스템 인스트럭션을 {spec.label}에 맞게 다시 맞췄습니다.")
     return notes
+
+
+def set_purpose(settings: Settings, model_id: str, purpose: str) -> None:
+    """용도를 바꾼다 (세션 6).
+
+    범용·코딩은 문구를 다시 조합한다. 커스텀으로 넘어갈 때는 지금 문구를
+    그대로 남겨 사용자가 이어서 고칠 수 있게 한다 — 빈 칸을 주면 처음부터
+    써야 해서 불친절하다.
+    """
+    settings.purpose = purpose
+    if purpose != PURPOSE_CUSTOM:
+        settings.system_instruction = compose_instruction(model_id, purpose)
 
 
 @dataclass

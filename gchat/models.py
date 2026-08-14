@@ -44,7 +44,8 @@ class ModelSpec:
     default_thinking_level: str  # 항상 "minimal"
     supports_system_instruction: bool
     # 계획서 2.6.2절 — 모델별 기본 시스템 인스트럭션. 없으면 "".
-    # 숨겨서 몰래 덧붙이지 않는다. 컨트롤 바의 입력칸에 그대로 채워 보인다.
+    # 세션 6 이후로는 **길이 지시** 역할만 한다. 용도 프리셋(범용·코딩) 문구 뒤에
+    # 이어붙여 최종 인스트럭션이 된다 (compose_instruction 참조).
     default_system_instruction: str
     supports_file_input: bool  # 계획서 2.9절 — v1 에서는 UI 게이팅용으로만 사용
     max_output_tokens: int  # 모델 상한
@@ -70,6 +71,50 @@ GEMMA_DEFAULT_INSTRUCTION = (
     "필요한 근거와 예시는 포함한다. 다만 같은 내용을 반복하거나 형식적인 "
     "서론·맺음말은 넣지 않는다."
 )
+
+# 용도 프리셋 (세션 6 실사용 요청). 모델과 무관하게 대화의 성격을 정한다.
+# 최종 인스트럭션 = 용도 문구 + 모델별 길이 지시(위 default_system_instruction).
+PURPOSE_GENERAL = "general"
+PURPOSE_CODING = "coding"
+PURPOSE_CUSTOM = "custom"
+
+PURPOSES: tuple[str, ...] = (PURPOSE_GENERAL, PURPOSE_CODING, PURPOSE_CUSTOM)
+
+PURPOSE_LABELS: dict[str, str] = {
+    PURPOSE_GENERAL: "범용",
+    PURPOSE_CODING: "코딩",
+    PURPOSE_CUSTOM: "커스텀",
+}
+
+PURPOSE_INSTRUCTIONS: dict[str, str] = {
+    PURPOSE_GENERAL: (
+        "질문의 의도를 먼저 파악하고 핵심부터 답한다. 근거와 예시를 함께 들되 "
+        "확실하지 않은 것은 모른다고 말한다."
+    ),
+    PURPOSE_CODING: (
+        "코드 질문에는 실행 가능한 코드를 먼저 보이고 그 아래에 왜 그렇게 했는지 "
+        "짧게 설명한다. 코드 블록에는 항상 언어를 표시한다. 오류 해결은 원인 → "
+        "수정 순서로 답한다. 확실하지 않은 API 는 지어내지 말고 모른다고 말한다."
+    ),
+    # 커스텀은 사용자가 직접 쓴다. 프리셋 문구를 두지 않는다.
+    PURPOSE_CUSTOM: "",
+}
+
+
+def purpose_label(purpose: str) -> str:
+    return PURPOSE_LABELS.get(purpose, purpose)
+
+
+def compose_instruction(model_id: str, purpose: str) -> str:
+    """용도 문구에 모델별 길이 지시를 이어붙인다 (세션 6 결정).
+
+    길이 지시를 빼면 Gemma 답변이 다시 3,000토큰으로 튀어 상한에서 잘린다
+    (세션 5·6 실측, docs/api_findings.md B-8·B-9). 용도가 바뀌어도 이 부분은 남는다.
+    Gemini 는 길이 지시가 없으므로 용도 문구만 들어간다.
+    """
+    parts = [PURPOSE_INSTRUCTIONS.get(purpose, ""), get_model(model_id).default_system_instruction]
+    return "\n\n".join(part for part in parts if part)
+
 
 # 사고 수준의 표시 라벨은 계열별로 다르다 (계획서 1.3절).
 THINKING_LABELS: dict[str, dict[str, str]] = {

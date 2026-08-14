@@ -8,7 +8,13 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from gchat.models import GEMMA_DEFAULT_INSTRUCTION
+from gchat.models import (
+    GEMMA_DEFAULT_INSTRUCTION,
+    PURPOSE_CODING,
+    PURPOSE_CUSTOM,
+    PURPOSE_GENERAL,
+    PURPOSE_INSTRUCTIONS,
+)
 from gchat.state import (
     DEFAULT_TITLE,
     TITLE_LIMIT,
@@ -17,6 +23,7 @@ from gchat.state import (
     adopt_model,
     new_conversation,
     remove_conversation,
+    set_purpose,
     shorten_title,
     sort_by_recent,
     title_from_first_message,
@@ -97,34 +104,57 @@ def test_새_대화는_응답_모드를_이어받는다():
     assert conv.settings.thinking_level == "high"
 
 
-def test_사용자가_편집한_인스트럭션은_이어받는다():
-    """계획서 2.6.2절 — 편집한 적이 있으면 모델을 바꿔도 덮어쓰지 않는다."""
+def test_커스텀_인스트럭션은_이어받는다():
+    """계획서 2.6.2절 — 커스텀이면 모델을 바꿔도 덮어쓰지 않는다."""
     previous = Settings(
         thinking_level="minimal",
         context_budget=32_000,
         system_instruction="3문장 이내로",
-        system_instruction_customized=True,
+        purpose=PURPOSE_CUSTOM,
     )
     conv = new_conversation(GEMMA, inherit=previous)
     assert conv.settings.system_instruction == "3문장 이내로"
+    assert conv.settings.purpose == PURPOSE_CUSTOM
     assert conv.settings.system_instruction_customized is True
 
 
-def test_편집한_적이_없으면_새_모델의_기본값을_채운다():
-    """계획서 2.6.2절 — Gemini(빈 값) → Gemma(간결 지시)."""
+def test_커스텀이_아니면_새_모델에_맞게_다시_조합한다():
+    """용도 문구는 유지하고 모델별 길이 지시만 갈아끼운다 (세션 6)."""
     previous = Settings(thinking_level="minimal", context_budget=32_000)
     conv = new_conversation(GEMMA, inherit=previous)
-    assert conv.settings.system_instruction == GEMMA_DEFAULT_INSTRUCTION
-    assert conv.settings.system_instruction_customized is False
+    assert conv.settings.purpose == PURPOSE_GENERAL
+    assert GEMMA_DEFAULT_INSTRUCTION in conv.settings.system_instruction
+    assert PURPOSE_INSTRUCTIONS[PURPOSE_GENERAL] in conv.settings.system_instruction
 
-    # 반대 방향 — Gemma(간결 지시) → Gemini(빈 값)
+    # 반대 방향 — Gemini 에는 길이 지시가 없다
     back = new_conversation(GEMINI, inherit=conv.settings)
-    assert back.settings.system_instruction == ""
+    assert GEMMA_DEFAULT_INSTRUCTION not in back.settings.system_instruction
+    assert PURPOSE_INSTRUCTIONS[PURPOSE_GENERAL] in back.settings.system_instruction
 
 
-def test_새_대화는_모델_기본_인스트럭션으로_시작한다():
-    assert new_conversation(GEMINI).settings.system_instruction == ""
-    assert new_conversation(GEMMA).settings.system_instruction == GEMMA_DEFAULT_INSTRUCTION
+def test_새_대화는_범용_용도로_시작한다():
+    gemini = new_conversation(GEMINI).settings
+    assert gemini.purpose == PURPOSE_GENERAL
+    assert gemini.system_instruction == PURPOSE_INSTRUCTIONS[PURPOSE_GENERAL]
+
+    gemma = new_conversation(GEMMA).settings
+    assert PURPOSE_INSTRUCTIONS[PURPOSE_GENERAL] in gemma.system_instruction
+    assert GEMMA_DEFAULT_INSTRUCTION in gemma.system_instruction
+
+
+def test_용도를_바꾸면_문구가_다시_조합된다():
+    settings = new_conversation(GEMMA).settings
+    set_purpose(settings, GEMMA, PURPOSE_CODING)
+    assert PURPOSE_INSTRUCTIONS[PURPOSE_CODING] in settings.system_instruction
+    assert GEMMA_DEFAULT_INSTRUCTION in settings.system_instruction  # 길이 지시는 남는다
+
+
+def test_커스텀으로_바꾸면_지금_문구를_이어서_고칠_수_있다():
+    settings = new_conversation(GEMMA).settings
+    before = settings.system_instruction
+    set_purpose(settings, GEMMA, PURPOSE_CUSTOM)
+    assert settings.system_instruction == before  # 빈 칸으로 만들지 않는다
+    assert settings.system_instruction_customized is True
 
 
 # --- 계열 내 모델 전환 (계획서 2.6.1절) ---------------------------------------------
@@ -144,19 +174,19 @@ def test_계열_내_전환은_예산을_건드리지_않는다():
     assert settings.context_budget == 5_000
 
 
-def test_전환_시_편집하지_않은_인스트럭션은_새_모델_기본값이_된다():
+def test_전환_시_커스텀이_아니면_새_모델에_맞게_다시_조합한다():
     settings = Settings(thinking_level="minimal", context_budget=32_000, system_instruction="")
     notes = adopt_model(settings, GEMMA)
-    assert settings.system_instruction == GEMMA_DEFAULT_INSTRUCTION
-    assert any("기본값" in note for note in notes)
+    assert GEMMA_DEFAULT_INSTRUCTION in settings.system_instruction
+    assert any("맞췄습니다" in note for note in notes)
 
 
-def test_전환_시_편집한_인스트럭션은_유지된다():
+def test_전환_시_커스텀_인스트럭션은_유지된다():
     settings = Settings(
         thinking_level="minimal",
         context_budget=32_000,
         system_instruction="내 지시",
-        system_instruction_customized=True,
+        purpose=PURPOSE_CUSTOM,
     )
     adopt_model(settings, GEMMA)
     assert settings.system_instruction == "내 지시"
