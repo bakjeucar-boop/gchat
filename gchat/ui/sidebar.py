@@ -177,7 +177,7 @@ def _render_quota(book: QuotaBook) -> None:
 
     tpm_text = f"{_compact(gauges.input_tokens_in_window)} / {_compact(gauges.tpm_limit)}"
     tpm_label = (
-        f"**분당 토큰** {tpm_text}" if spec.family == FAMILY_GEMMA4 else f"분당 토큰 {tpm_text}"
+        f"**분당 글자** {tpm_text}" if spec.family == FAMILY_GEMMA4 else f"분당 글자 {tpm_text}"
     )
     bars = [
         (tpm_label, _ratio(gauges.input_tokens_in_window, gauges.tpm_limit)),
@@ -198,5 +198,6 @@ def _render_quota(book: QuotaBook) -> None:
         st.progress(value, text=label)
 
     st.caption(
-        "분당 토큰은 입력만 셉니다 (계획서 1.4절). 이 값은 추정치이고 서버 429가 최종 진실입니다."
+        "질문과 지난 대화가 길수록 '분당 글자'가 빨리 찹니다. "
+        "여기 숫자는 앱이 세는 추정치라 실제와 조금 다를 수 있습니다."
     )

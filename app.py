@@ -58,8 +58,7 @@ st.title("gchat")
 
 if client is None:
     st.warning(
-        f"`{SECRET_KEY_API}` 가 설정되어 있지 않습니다. "
-        "`.streamlit/secrets.toml` 에 API 키를 넣어야 응답 생성이 동작합니다."
+        "API 키가 등록되어 있지 않아 답변을 받을 수 없습니다. 앱 설정(Secrets)에 키를 넣어 주세요."
     )
 
 # 순서가 화면 배치다 (계획서 2.6절).

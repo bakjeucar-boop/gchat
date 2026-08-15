@@ -259,8 +259,8 @@ class QuotaTracker:
             return Verdict(
                 kind=VerdictKind.TOO_LARGE,
                 reason=(
-                    f"이 입력은 {self.spec.label}의 요청당 한도"
-                    f"({self.allowed_tpm:,} 토큰)를 넘습니다."
+                    f"이번 질문이 너무 깁니다. {self.spec.label}가 한 번에 받을 수 있는 "
+                    f"분량을 넘었습니다."
                 ),
             )
 
@@ -268,8 +268,8 @@ class QuotaTracker:
             return Verdict(
                 kind=VerdictKind.DAILY_EXHAUSTED,
                 reason=(
-                    f"{self.spec.label}의 오늘 사용량을 다 썼습니다 "
-                    f"({self._daily_requests:,} / {self.spec.limits.rpd:,})."
+                    f"오늘 {self.spec.label} 사용량을 다 썼습니다 "
+                    f"({self._daily_requests:,}회 / {self.spec.limits.rpd:,}회)."
                 ),
             )
 
@@ -285,7 +285,7 @@ class QuotaTracker:
             # 창은 비었는데 서버는 429 를 준 상태. 막지는 않되 정직하게 알린다.
             return Verdict(
                 kind=VerdictKind.OK,
-                reason="서버가 대기 시간을 알려주지 않았습니다. 다시 막힐 수 있습니다.",
+                reason="방금 한도에 걸렸습니다. 지금 보내면 또 막힐 수 있습니다.",
                 server_wait_unknown=True,
             )
         return Verdict(kind=VerdictKind.OK)
@@ -293,11 +293,8 @@ class QuotaTracker:
     def _wait_reason(self, wait: float) -> str:
         seconds = math.ceil(wait)
         if self._server_wait_unknown:
-            return (
-                f"서버가 대기 시간을 알려주지 않았습니다. "
-                f"자체 계산으로 약 {seconds}초 뒤 다시 시도할 수 있습니다."
-            )
-        return f"{self.spec.label}의 분당 한도에 도달했습니다. {seconds}초 후 보낼 수 있습니다."
+            return f"잠시 쉬어야 합니다. 약 {seconds}초 뒤 다시 보낼 수 있습니다."
+        return f"{self.spec.label}를 잠깐 쉬게 해야 합니다. {seconds}초 후 보낼 수 있습니다."
 
     def _wait_needed(self, now: datetime, estimated: int) -> float:
         """전송 가능해질 때까지 남은 초. 추정이 아니라 계산으로 낸다."""
@@ -410,8 +407,8 @@ class QuotaBook:
                 model_id=chosen.model_id,
                 wait_s=0.0,
                 message=(
-                    f"지금 바로 보내려면 {chosen.spec.label}로 전환하세요 "
-                    f"(오늘 잔여 {chosen.daily_remaining():,}회)."
+                    f"지금 바로 보내려면 {chosen.spec.label}로 바꾸세요 "
+                    f"(오늘 {chosen.daily_remaining():,}회 남음)."
                 ),
             )
 
@@ -424,7 +421,7 @@ class QuotaBook:
         if not usable:
             return Recommendation(
                 model_id=None,
-                message="이 요청은 모든 모델의 요청당 한도를 넘습니다. 새 대화로 시작하세요.",
+                message="이 질문은 모든 모델이 한 번에 받기엔 너무 깁니다. 나눠서 물어보세요.",
             )
         soonest = min(usable, key=lambda t: t.next_wait_s(estimated_input_tokens))
         wait = soonest.next_wait_s(estimated_input_tokens)

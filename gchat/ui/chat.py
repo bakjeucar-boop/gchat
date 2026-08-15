@@ -39,18 +39,21 @@ S_PARTIAL = "chat_partial_text"
 
 
 def render_history(conv: Conversation) -> None:
-    """지난 메시지를 그린다. 컨트롤 바가 이 아래·입력창 위에 놓인다."""
+    """지난 메시지를 그린다. 컨트롤 바가 이 아래·입력창 위에 놓인다.
+
+    멈춤으로 끊긴 답을 **그리기 전에** 붙인다. 입력창 쪽에서 붙이면 이 함수가
+    이미 지나간 뒤라 그 답이 화면에 나오지 않는다 — 사용자가 "계속"을 쳐서
+    다시 그려질 때까지 사라진 것처럼 보인다 (세션 7 피드백).
+    """
+    _commit_interrupted(conv)
     _render_header(conv)
     _render_messages(conv)
 
 
 def render_input(client: GeminiClient | None, book: QuotaBook, conv: Conversation) -> None:
     if client is None:
-        st.chat_input("API 키가 없어 전송할 수 없습니다", disabled=True)
+        st.chat_input("API 키가 없어 보낼 수 없습니다", disabled=True)
         return
-
-    # 멈춤 버튼으로 실행이 끊겼다면, 그때까지 받은 답을 먼저 대화에 남긴다.
-    _commit_interrupted(conv)
 
     prompt = st.chat_input("메시지를 입력하세요")
     if prompt:
@@ -156,7 +159,7 @@ def _render_messages(conv: Conversation) -> None:
     for index, message in enumerate(conv.messages):
         if message.truncated_from_context and not shown_truncation_note:
             trimmed = sum(1 for m in conv.messages if m.truncated_from_context)
-            st.info(f"앞선 {trimmed}개 메시지가 컨텍스트에서 제외됨 (모델 한도)")
+            st.info(f"길이 제한 때문에 앞선 대화 {trimmed}개는 이번 답변에 참고되지 않습니다.")
             shown_truncation_note = True
         avatar = "user" if message.role == "user" else "assistant"
         with st.chat_message(avatar):
@@ -214,16 +217,16 @@ def _render_message_meta(message: Message) -> None:
         return
     bits = []
     if message.in_tokens is not None:
-        bits.append(f"입력 {message.in_tokens:,} / 출력 {message.out_tokens or 0:,} 토큰")
+        bits.append(f"질문 {message.in_tokens:,} · 답변 {message.out_tokens or 0:,} 글자분")
     if message.latency_s is not None:
         bits.append(f"{message.latency_s:.1f}초")
     if bits:
         st.caption(" · ".join(bits))
     if message.truncated_output:
         # 계획서 2.8절 — 출력 토큰 슬라이더는 UI 에 없다. "계속" 으로 이어받는다.
-        st.info("출력 한도로 잘렸습니다. '계속'이라고 입력하면 이어서 답합니다.")
+        st.info("답이 길어 중간에서 끊겼습니다. '계속'이라고 입력하면 이어서 씁니다.")
     if message.stopped_by_user:
-        st.info("멈춤 버튼으로 중단했습니다. '계속'이라고 입력하면 이어서 답합니다.")
+        st.info("멈춤 버튼으로 중단했습니다. '계속'이라고 입력하면 이어서 씁니다.")
 
 
 def _send(conv: Conversation, client: GeminiClient, book: QuotaBook) -> None:
@@ -245,7 +248,7 @@ def _send(conv: Conversation, client: GeminiClient, book: QuotaBook) -> None:
         count_exact=lambda messages: client.count_tokens(model_id, messages),
     )
     if trim.truncated:
-        st.info(f"앞선 {trim.trimmed}개 메시지가 컨텍스트에서 제외됨 (모델 한도)")
+        st.info(f"길이 제한 때문에 앞선 대화 {trim.trimmed}개는 이번 답변에 참고되지 않습니다.")
 
     tracker = book.tracker(model_id)
     verdict = tracker.precheck(trim.tokens)
@@ -301,7 +304,7 @@ def _render_blocked(verdict: Verdict, tokens: int, book: QuotaBook, model_id: st
         st.warning(verdict.reason)
 
     if verdict.server_wait_unknown:
-        st.caption("서버가 대기 시간을 알려주지 않아 자체 계산값으로 안내합니다.")
+        st.caption("남은 시간을 정확히 알 수 없어 앱이 계산한 값으로 안내합니다.")
 
     if verdict.kind in (VerdictKind.DAILY_EXHAUSTED, VerdictKind.TOO_LARGE, VerdictKind.WAIT):
         recommendation = book.recommend(tokens, exclude=model_id)
@@ -329,8 +332,14 @@ def _render_error(
         st.error(str(exc))
     elif isinstance(exc, RequestRejected):
         st.error(str(exc))
+        # 원문은 화면 문구에서 뺐지만 완전히 감추지도 않는다 (계획서 2.8절 —
+        # 무엇이 왜 실패했는지 사용자가 알 수 있어야 한다).
+        with st.expander("자세한 내용"):
+            st.caption(exc.message)
     else:
-        st.error(f"요청에 실패했습니다: {exc}")
+        st.error("요청에 실패했습니다. 잠시 후 다시 시도해 보세요.")
+        with st.expander("자세한 내용"):
+            st.caption(str(exc))
     _retry_button(conv)
 
 

@@ -289,4 +289,4 @@ def test_안내_문구는_모델_이름과_전환_대상을_담는다():
     message = too_large_message(GEMMA, GEMINI)
     assert "Gemma 4 31B" in message
     assert "Gemini 3.5 Flash-Lite" in message
-    assert "14,400" in message
+    assert "너무 깁니다" in message

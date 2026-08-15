@@ -221,7 +221,6 @@ def too_large_message(model_id: str, fallback_model_id: str) -> str:
     spec = get_model(model_id)
     fallback = get_model(fallback_model_id)
     return (
-        f"이 입력은 {spec.label}의 요청당 한도"
-        f"({max_request_tokens(model_id):,} 토큰)를 넘습니다. "
-        f"{fallback.label}로 전환하세요."
+        f"이번 질문이 너무 깁니다. {spec.label}가 한 번에 받을 수 있는 분량을 "
+        f"넘었습니다. {fallback.label}로 바꾸거나 질문을 나눠 보세요."
     )

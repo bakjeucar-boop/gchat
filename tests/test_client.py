@@ -197,7 +197,7 @@ def test_대기시간이_없는_429도_처리한다():
     err = translate_error(FakeApiError(429, REAL_429_NO_RETRY))
     assert isinstance(err, RateLimited)
     assert err.retry_after_s is None
-    assert "알려주지 않았습니다" in str(err)
+    assert "잠시 뒤 다시" in str(err)
 
 
 def test_일일_한도는_quotaId로_구분한다():
@@ -217,13 +217,14 @@ def test_503은_429와_구분한다():
     """실측 B-1 — 병렬 요청 중 실제로 발생했다."""
     err = translate_error(FakeApiError(503, "503 UNAVAILABLE. high demand"))
     assert isinstance(err, ServiceUnavailable)
-    assert "혼잡" in str(err)
+    assert "붐빕니다" in str(err)
 
 
 def test_400은_요청_거부로_옮긴다():
     err = translate_error(FakeApiError(400, "Thinking level is not supported for this model."))
     assert isinstance(err, RequestRejected)
-    assert "거부" in str(err)
+    assert "보낼 수 없습니다" in str(err)
+    assert "INVALID_ARGUMENT" not in str(err)  # 원문은 화면에 쓰지 않는다
 
 
 def test_잘못된_API_키는_원문을_노출하지_않는다():
@@ -231,8 +232,8 @@ def test_잘못된_API_키는_원문을_노출하지_않는다():
     raw = "400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key not valid. ...'}}"
     err = translate_error(FakeApiError(400, raw))
     assert isinstance(err, InvalidApiKey)
-    assert "GEMINI_API_KEY" in str(err)
-    assert "{" not in str(err)
+    assert "API 키" in str(err)
+    assert "{" not in str(err)  # 원문 JSON 금지
 
 
 def test_스택트레이스를_그대로_노출하지_않는다():
@@ -265,10 +266,10 @@ def test_MAX_TOKENS는_잘림으로_표시된다():
     assert StreamResult(text="전부", finish_reason="STOP").truncated is False
 
 
-def test_빈_응답_메시지가_사고_토큰을_설명한다():
+def test_빈_응답_메시지가_원인과_해법을_말한다():
     err = EmptyResponse(finish_reason="MAX_TOKENS", thoughts_tokens=47)
-    assert "47" in str(err)
-    assert "응답 모드" in str(err)
+    assert "생각만" in str(err)
+    assert "응답 모드" in str(err)  # 사용자가 실제로 바꿀 수 있는 것을 가리킨다
 
 
 def test_thinking_config는_SDK_타입이다():

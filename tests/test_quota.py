@@ -100,7 +100,7 @@ def test_시나리오2_분당_요청_초과시_WAIT(clock: FakeClock):
     assert verdict.kind is VerdictKind.WAIT
     # 첫 요청은 13초 전이므로 60 - 13 = 47초 남았다
     assert verdict.wait_s == pytest.approx(47.0)
-    assert "분당 한도" in verdict.reason
+    assert "잠깐 쉬게" in verdict.reason and "47초" in verdict.reason
 
 
 def test_시나리오2_창이_비면_다시_OK(clock: FakeClock):
@@ -148,7 +148,7 @@ def test_시나리오4_일일_소진시_DAILY_EXHAUSTED(clock: FakeClock):
         clock.advance(0.1)
     verdict = tracker.precheck(10)
     assert verdict.kind is VerdictKind.DAILY_EXHAUSTED
-    assert "오늘 사용량" in verdict.reason
+    assert "오늘" in verdict.reason and "다 썼습니다" in verdict.reason
     assert tracker.daily_remaining() == 0
 
 
@@ -180,7 +180,7 @@ def test_시나리오5_단일_요청이_한도를_넘으면_TOO_LARGE(clock: Fak
     tracker = QuotaTracker(GEMMA, clock)
     verdict = tracker.precheck(20_000)  # TPM 90% = 14,400
     assert verdict.kind is VerdictKind.TOO_LARGE
-    assert "요청당 한도" in verdict.reason
+    assert "너무 깁니다" in verdict.reason
 
 
 def test_시나리오5_TOO_LARGE가_다른_판정보다_먼저다(clock: FakeClock):
@@ -228,7 +228,7 @@ def test_retryDelay가_없는_429는_자체_계산값을_쓴다(clock: FakeClock
     verdict = tracker.precheck(100)  # 우리 창은 비어 있다
     assert verdict.kind is VerdictKind.OK  # 막지 않는다
     assert verdict.server_wait_unknown is True
-    assert "알려주지 않았습니다" in verdict.reason
+    assert "또 막힐 수 있습니다" in verdict.reason
 
 
 def test_retryDelay가_없어도_창이_찼으면_그_계산값으로_기다린다(clock: FakeClock):
@@ -239,7 +239,7 @@ def test_retryDelay가_없어도_창이_찼으면_그_계산값으로_기다린�
     assert verdict.kind is VerdictKind.WAIT
     assert verdict.wait_s == pytest.approx(60.0)
     assert verdict.server_wait_unknown is True
-    assert "알려주지 않았습니다" in verdict.reason
+    assert "잠시 쉬어야 합니다" in verdict.reason
 
 
 # --- 시나리오 7: 서버 429 (일일) -------------------------------------------------
@@ -403,7 +403,7 @@ def test_추천은_기본_모델을_우선한다(clock: FakeClock):
     rec = book.recommend(1_000, exclude=GEMMA)
     assert rec.model_id == GEMINI
     assert rec.available_now is True
-    assert "잔여" in rec.message
+    assert "남음" in rec.message
 
 
 def test_추천은_RPD_여유가_없는_모델을_제외한다(clock: FakeClock):

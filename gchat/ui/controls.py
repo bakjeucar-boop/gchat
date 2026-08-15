@@ -54,7 +54,7 @@ def render_badge(book: QuotaBook, conv: Conversation) -> None:
     used = estimate_messages(conv.messages) + estimate_tokens(conv.settings.system_instruction)
     line = (
         f"{spec.label} · {thinking_label(spec.id, conv.settings.thinking_level)}"
-        f" · 맥락 {used:,}/{conv.settings.context_budget:,}"
+        f" · 기억 {used:,}/{conv.settings.context_budget:,}"
     )
 
     # 대기는 실제로 예상될 때만 덧붙인다 (계획서 2.3절). 0이면 아무것도 쓰지 않는다.
@@ -125,7 +125,7 @@ def _render_thinking(spec: ModelSpec, conv: Conversation) -> None:
         format_func=lambda level: thinking_label(spec.id, level),
         key=f"thinking_{conv.id}_{spec.id}",
         horizontal=True,
-        help="사고 수준만 응답 성향을 바꿉니다 (계획서 1.2절). 다음 요청부터 적용됩니다.",
+        help="더 깊게 생각할수록 답이 늦게 나옵니다. 다음 질문부터 적용됩니다.",
     )
 
 
@@ -134,29 +134,28 @@ def _render_budget(spec: ModelSpec, conv: Conversation) -> None:
     ceiling = max_request_tokens(spec.id)  # TPM 의 90% — 테이블에서 유도한다
     previous = conv.settings.context_budget
     chosen = st.slider(
-        "컨텍스트 예산",
+        "기억할 대화 분량",
         min_value=BUDGET_MIN,
         max_value=ceiling,
         value=min(previous, ceiling),
         step=BUDGET_STEP,
         key=f"budget_{conv.id}_{spec.id}",
-        help=f"{spec.label}의 요청당 한도는 {ceiling:,} 토큰입니다 (TPM의 90%).",
+        help=f"한 번에 보낼 수 있는 최대 분량입니다. {spec.label}는 여기까지 됩니다.",
     )
     conv.settings.context_budget = chosen
 
     # 계획서 1.5절 — 상수가 아니라 이 대화의 실측 평균으로 계산한다.
     per_turn = tokens_per_turn(conv.messages)
-    st.caption(f"약 {max(1, chosen // per_turn)}턴 유지 (턴당 약 {per_turn:,} 토큰)")
+    st.caption(f"최근 대화 기준 약 {max(1, chosen // per_turn)}번 주고받을 만큼 기억합니다.")
 
     # 경계도 유도한다. 답변이 길어지면 생성 시간이 늘어 경계가 위로 움직인다.
     average_output = average_output_tokens(conv.messages)
     boundary = tpm_boundary_budget(spec.id, average_output)
     if chosen > boundary:
         st.warning(
-            f"**{boundary:,} 이하면 대기가 없습니다.** 지금 값({chosen:,})에서는 답변이 "
-            f"끝난 뒤 다음 질문을 바로 보낼 때 잠깐 기다릴 수 있습니다. "
-            f"이 기준은 최근 답변 길이(약 {average_output:,} 토큰)에서 계산합니다 — "
-            f"답변이 길어지면 기준도 올라갑니다.",
+            f"**{boundary:,} 이하로 두면 기다릴 일이 없습니다.** 지금 값({chosen:,})에서는 "
+            f"답이 끝난 직후 바로 다음 질문을 보낼 때 잠깐 기다릴 수 있습니다. "
+            f"이 기준은 최근 답변 길이에 따라 달라집니다.",
             icon="⚠️",
         )
 
@@ -166,7 +165,7 @@ def _render_budget(spec: ModelSpec, conv: Conversation) -> None:
             conv.messages, chosen, system_instruction=conv.settings.system_instruction
         )
         if excluded:
-            st.info(f"현재 대화에서 {excluded}개 메시지가 컨텍스트에서 제외됩니다.")
+            st.info(f"이 값으로 줄이면 앞선 대화 {excluded}개는 다음 답변에 참고되지 않습니다.")
 
 
 def _render_purpose(spec: ModelSpec, conv: Conversation) -> None:
@@ -181,7 +180,7 @@ def _render_purpose(spec: ModelSpec, conv: Conversation) -> None:
         format_func=purpose_label,
         key=f"purpose_{conv.id}_{spec.id}",
         horizontal=True,
-        help="범용·코딩은 문구가 자동으로 들어갑니다. 직접 쓰려면 커스텀을 고르세요.",
+        help="범용·코딩은 지시문이 자동으로 채워집니다. 직접 쓰려면 커스텀을 고르세요.",
     )
     if chosen != settings.purpose:
         state.set_purpose(settings, spec.id, chosen)
@@ -196,7 +195,7 @@ def _render_purpose(spec: ModelSpec, conv: Conversation) -> None:
         value=settings.system_instruction,
         key=widget_key,
         height=140,
-        help="비워두면 사용하지 않습니다. 컨텍스트에 영향이 없어 대화 중 바꿔도 안전합니다.",
+        help="AI에게 매번 함께 보내는 지시문입니다. 비워두면 쓰지 않습니다.",
     )
     if value != settings.system_instruction:
         settings.system_instruction = value
@@ -204,7 +203,7 @@ def _render_purpose(spec: ModelSpec, conv: Conversation) -> None:
     st.button(
         "용도 기본 문구 가져오기",
         key=f"reset_sysinst_{conv.id}_{spec.id}",
-        help="범용 문구와 이 모델의 길이 지시를 다시 채웁니다.",
+        help="범용 지시문으로 되돌립니다.",
         on_click=_fill_default_instruction,
         args=(settings, spec.id, widget_key),
     )

@@ -68,11 +68,7 @@ def check_password() -> bool:
 
     expected = get_secret(SECRET_KEY_PASSWORD)
     if not expected:
-        st.error(
-            f"`{SECRET_KEY_PASSWORD}` 가 설정되어 있지 않습니다. "
-            "`.streamlit/secrets.toml` 에 20자 이상의 무작위 비밀번호를 넣어 주세요. "
-            "`.streamlit/secrets.toml.example` 을 참고하세요."
-        )
+        st.error("비밀번호가 설정되어 있지 않습니다. 앱 설정(Secrets)을 확인해 주세요.")
         return False
 
     failed = st.session_state.get(S_FAILED_ATTEMPTS, 0)

@@ -45,8 +45,8 @@ class RateLimited(GchatApiError):
         if self.retry_after_s is not None:
             # 올림한다. 내림하면 안내한 시각에 다시 보내도 또 429 다.
             seconds = math.ceil(self.retry_after_s)
-            return f"한도에 도달했습니다. {seconds}초 후 다시 시도할 수 있습니다."
-        return "한도에 도달했습니다. 서버가 대기 시간을 알려주지 않았습니다."
+            return f"사용량 한도에 걸렸습니다. {seconds}초 후 다시 보낼 수 있습니다."
+        return "사용량 한도에 걸렸습니다. 잠시 뒤 다시 보내 주세요."
 
     @property
     def is_daily(self) -> bool:
@@ -61,7 +61,7 @@ class ServiceUnavailable(GchatApiError):
     message: str
 
     def __str__(self) -> str:
-        return "모델이 일시적으로 혼잡합니다. 잠시 후 다시 보내 주세요."
+        return "지금 서버가 붐빕니다. 잠시 후 다시 보내 주세요."
 
 
 @dataclass
@@ -71,7 +71,9 @@ class RequestRejected(GchatApiError):
     message: str
 
     def __str__(self) -> str:
-        return f"요청이 거부되었습니다: {self.message}"
+        # 원문(400 INVALID_ARGUMENT + JSON)은 message 에 남겨 두고 화면에는 쓰지
+        # 않는다. 화면에 필요한 사람은 "자세한 내용"을 펼쳐 본다 (세션 7 피드백).
+        return "이 설정으로는 보낼 수 없습니다. 응답 모드나 용도를 바꿔 다시 시도해 보세요."
 
 
 @dataclass
@@ -79,10 +81,7 @@ class InvalidApiKey(GchatApiError):
     """API 키가 잘못된 경우. 원문 JSON 을 화면에 흘리지 않는다 (계획서 5절 24번)."""
 
     def __str__(self) -> str:
-        return (
-            "API 키가 유효하지 않습니다. `.streamlit/secrets.toml` 의 "
-            "`GEMINI_API_KEY` 를 확인하세요."
-        )
+        return "API 키가 올바르지 않습니다. 앱 설정에 등록한 키를 확인해 주세요."
 
 
 @dataclass
@@ -92,7 +91,7 @@ class ResponseBlocked(GchatApiError):
     reason: str
 
     def __str__(self) -> str:
-        return f"응답이 차단되었습니다 (사유: {self.reason}). 표현을 바꿔 다시 시도해 보세요."
+        return "안전 정책에 걸려 답하지 못했습니다. 표현을 바꿔 다시 물어보세요."
 
 
 @dataclass
@@ -109,10 +108,9 @@ class EmptyResponse(GchatApiError):
     def __str__(self) -> str:
         if self.thoughts_tokens:
             return (
-                f"모델이 생각만 하다 출력 한도에 걸렸습니다 "
-                f"(사고 {self.thoughts_tokens:,}토큰). 응답 모드를 낮춰 보세요."
+                "생각만 하다가 답을 쓰지 못했습니다. 응답 모드를 한 단계 낮추면 대체로 해결됩니다."
             )
-        return "모델이 빈 응답을 돌려주었습니다."
+        return "빈 답이 돌아왔습니다. 질문을 조금 바꿔 다시 보내 보세요."
 
 
 # --- 응답 부가 정보 -----------------------------------------------------------
@@ -253,7 +251,7 @@ class GeminiClient:
 
     def __init__(self, api_key: str) -> None:
         if not api_key:
-            raise GchatApiError("API 키가 없습니다. .streamlit/secrets.toml 을 확인하세요.")
+            raise GchatApiError("API 키가 없습니다. 앱 설정에 키를 등록해 주세요.")
         self._client = genai.Client(api_key=api_key)
 
     def count_tokens(self, model_id: str, messages: list[Message]) -> int:
