@@ -149,9 +149,16 @@ def _render_budget(spec: ModelSpec, conv: Conversation) -> None:
     st.caption(f"약 {max(1, chosen // per_turn)}턴 유지 (턴당 약 {per_turn:,} 토큰)")
 
     # 경계도 유도한다. 답변이 길어지면 생성 시간이 늘어 경계가 위로 움직인다.
-    boundary = tpm_boundary_budget(spec.id, average_output_tokens(conv.messages))
+    average_output = average_output_tokens(conv.messages)
+    boundary = tpm_boundary_budget(spec.id, average_output)
     if chosen > boundary:
-        st.warning(f"{boundary:,}부터는 요청 사이에 대기가 생길 수 있습니다.", icon="⚠️")
+        st.warning(
+            f"**{boundary:,} 이하면 대기가 없습니다.** 지금 값({chosen:,})에서는 답변이 "
+            f"끝난 뒤 다음 질문을 바로 보낼 때 잠깐 기다릴 수 있습니다. "
+            f"이 기준은 최근 답변 길이(약 {average_output:,} 토큰)에서 계산합니다 — "
+            f"답변이 길어지면 기준도 올라갑니다.",
+            icon="⚠️",
+        )
 
     # 계획서 2.6.1.1절 — 줄일 때만 사전 안내한다.
     if chosen < previous:

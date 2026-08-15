@@ -90,6 +90,40 @@ def _awaiting_reply(conv: Conversation) -> bool:
     return bool(conv.messages) and conv.messages[-1].role == "user"
 
 
+# 멈춤 버튼을 입력창 바로 위에 **화면 고정**한다 (세션 7 피드백).
+# 스트림 앞에 그냥 두면 대화가 길 때 뷰포트 밖(실측: top 2005px / 화면 720px)에
+# 있어 보이지 않는다. 답변이 자랄수록 더 밀려난다. sticky 로는 부족하고
+# (스크롤이 그 지점까지 가야 붙는다) fixed 여야 항상 보인다.
+_STOP_BUTTON_CSS = """
+<style>
+  .st-key-gchat_stop {
+    position: fixed;
+    bottom: 6.2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    width: auto !important;
+  }
+  .st-key-gchat_stop button { box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+</style>
+"""
+
+
+def _render_stop_button(conv: Conversation) -> None:
+    """생성 중단 (세션 6 요청 — 모델이 같은 글자를 되풀이할 때 끊는다).
+
+    스트림 **앞에** 그려야 화면에 먼저 나온다. 누르면 리런이 걸려 실행 중인
+    스크립트가 중단되므로 별도 처리기가 필요 없다.
+    """
+    st.markdown(_STOP_BUTTON_CSS, unsafe_allow_html=True)
+    with st.container(key="gchat_stop"):
+        st.button(
+            "⏹ 멈춤",
+            key=f"stop_{conv.id}_{len(conv.messages)}",
+            help="생성을 중단합니다. 그때까지 받은 답은 남습니다.",
+        )
+
+
 def _capture(chunks):
     """조각을 세션에 쌓으면서 흘려보낸다. 멈춤으로 끊겨도 남는다."""
     st.session_state[S_PARTIAL] = ""
@@ -229,10 +263,7 @@ def _send(conv: Conversation, client: GeminiClient, book: QuotaBook) -> None:
     started = time.monotonic()
     result = StreamResult()
 
-    # 멈춤 버튼은 스트림 **앞에** 그려야 화면에 먼저 나온다. 누르면 리런이 걸려
-    # 실행 중인 스크립트가 중단된다 — 별도 처리기가 필요 없다.
-    # 모델이 같은 글자를 되풀이하는 경우를 끊는 용도다 (세션 6 피드백).
-    st.button("⏹ 멈춤", key=f"stop_{conv.id}_{len(conv.messages)}", help="생성을 중단합니다")
+    _render_stop_button(conv)
 
     with st.chat_message("assistant"):
         try:
