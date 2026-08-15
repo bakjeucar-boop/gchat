@@ -454,6 +454,7 @@ class Message:
     truncated_from_context: bool = False   # 컨텍스트에서 제외됨 (화면에는 남음)
     latency_s: float | None = None         # 2.8절 응답 지연 표시용 (세션 4 추가)
     truncated_output: bool = False         # MAX_TOKENS로 잘림 (2.8절, 세션 4 추가)
+    stopped_by_user: bool = False          # ⏹ 멈춤으로 중단됨 (2.1절, 세션 6 추가)
 
 @dataclass
 class Conversation:
@@ -943,7 +944,7 @@ APP_PASSWORD = "..."
 | 4 | `ui/chat.py`, `ui/sidebar.py` — 대화 진행, 목록, 삭제, 휘발성 경고 | 멀티턴 맥락 유지 육안 확인. 일괄 삭제 2단계 확인 동작 |
 | 5 | `ui/controls.py` 컨트롤 바 + 한도 게이지 + 차단 안내 + 모델 전환 확인 | 모델 전환 시 사고 수준 선택지가 바뀌고 미지원 값이 minimal로 되돌아감. Gemma일 때만 예산 슬라이더 노출 |
 | 6 | 세션 5 피드백 반영 + `export.py` + 2차 피드백(멈춤 버튼·용도 프리셋·사이드바 재배치) — **완료** | pytest 201 통과. 인스트럭션 실측 1,301토큰으로 목표 달성 |
-| **7** | **육안 확인 3건 + 배포** | 복사·멈춤·코딩 긴 코드 육안 확인. GitHub 원격 생성 → Streamlit Cloud 배포 → Secrets 등록 |
+| **7** | **코드 따라잡기 3건 + 육안 확인 3건 + 배포** | 용도별 출력 상한·턴 수 동적 계산·경고 기준선 9,000 반영. 복사·멈춤·코딩 긴 코드 육안 확인. GitHub 원격 생성 → Streamlit Cloud 배포 → Secrets 등록 |
 
 ---
 
