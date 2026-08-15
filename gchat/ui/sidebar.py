@@ -39,13 +39,21 @@ _LIST_CSS = """
 <style>
   [class*="st-key-open_"] button {
     /* 설정 라벨·캡션이 모두 14px 이라 그 크기로는 지금과 달라 보이지 않는다.
-       목록은 훑어보는 곳이므로 한 단계 더 줄이고 상자도 함께 낮춘다. */
-    font-size: 0.75rem;
+       목록은 훑어보는 곳이므로 10px 까지 줄이고 상자도 함께 낮춘다 (세션 7 피드백). */
+    font-size: 0.625rem;
     line-height: 1.35;
     justify-content: flex-start;
     text-align: left;
     padding: 0.15rem 0.45rem;
     min-height: 0;
+  }
+  /* 라벨은 button 안쪽 markdown 컨테이너의 <p> 로 그려지고, 그 <p> 가
+     font-size 를 16px 로 다시 잡는다. 여기를 지정하지 않으면 button 에 건
+     크기는 실제 글자에 닿지 않고 상자만 줄어든다 (세션 7 실측). */
+  [class*="st-key-open_"] button p {
+    font-size: 0.625rem;
+    line-height: 1.35;
+    margin: 0;
   }
   [class*="st-key-open_active_"] button { font-weight: 700; }
   [class*="st-key-edit_"] button,
