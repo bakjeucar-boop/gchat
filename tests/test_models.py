@@ -149,9 +149,19 @@ def test_사고_수준_선택지가_계획서_1_2절과_일치한다(model_id: s
 
 
 @pytest.mark.parametrize("spec", MODELS, ids=lambda s: s.id)
-def test_기본_사고_수준은_항상_minimal이고_선택지에_들어있다(spec: ModelSpec):
-    assert spec.default_thinking_level == "minimal"
+def test_기본_사고_수준은_그_모델의_선택지에_들어있다(spec: ModelSpec):
     assert spec.default_thinking_level in spec.thinking_levels
+
+
+def test_기본_사고_수준은_계획서_1_2절_표와_일치한다():
+    """세션 7 변경 — Gemini 는 medium, Gemma 는 minimal.
+
+    한도에는 영향이 없고(입력 토큰만 센다) 응답 시간만 2.2초 늘어난다.
+    Gemma 는 출력 상한이 좁아 사고 토큰이 답변을 잘라먹으므로 꺼짐을 유지한다.
+    """
+    assert get_model(GEMINI).default_thinking_level == "medium"
+    for spec in models_in_family(FAMILY_GEMMA4):
+        assert spec.default_thinking_level == "minimal"
 
 
 @pytest.mark.parametrize("spec", MODELS, ids=lambda s: s.id)
@@ -177,7 +187,7 @@ def test_지원하지_않는_사고_수준은_minimal로_되돌아간다():
     assert resolve_thinking_level("gemma-4-31b-it", "medium") == "minimal"
     assert resolve_thinking_level("gemma-4-31b-it", "high") == "high"
     assert resolve_thinking_level("gemini-3.5-flash-lite", "medium") == "medium"
-    assert resolve_thinking_level("gemini-3.5-flash-lite", None) == "minimal"
+    assert resolve_thinking_level("gemini-3.5-flash-lite", None) == "medium"  # 그 모델의 기본값
 
 
 def test_샘플링_파라미터_필드는_존재하지_않는다():

@@ -21,7 +21,7 @@ MOMENT = datetime(2026, 8, 13, 14, 30, tzinfo=KST)
 
 
 def make_conversation(title: str = "인버터 용량 산정") -> object:
-    conv = new_conversation(GEMINI)
+    conv = new_conversation(GEMINI)  # 기본 응답 모드는 medium (계획서 1.2절)
     conv.title = title
     conv.messages = [
         Message(role="user", content="인버터 용량을 어떻게 정하나요?", created_at=MOMENT),
@@ -71,7 +71,7 @@ def test_frontmatter에_필요한_항목이_모두_들어간다():
     assert "생성: 2026-08-13 14:30 (KST)" in head
     assert "제목: 인버터 용량 산정" in head
     assert "모델: Gemini 3.5 Flash-Lite" in head
-    assert "응답 모드: 빠름 (thinking_level=minimal)" in head
+    assert "응답 모드: 보통 (thinking_level=medium)" in head
     assert "컨텍스트 예산: 32,000" in head
     assert "메시지 수: 2" in head
     assert "누적 토큰: 입력 24 / 출력 312" in head

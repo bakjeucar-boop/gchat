@@ -64,14 +64,33 @@
 
 | 모델 | 선택지 | 기본값 |
 |---|---|---|
-| Gemini 3.5 Flash-Lite | `minimal` / `medium` / `high` (3단계) | `minimal` |
+| Gemini 3.5 Flash-Lite | `minimal` / `medium` / `high` (3단계) | **`medium`** (세션 7 변경) |
 | Gemma 4 (26B / 31B) | `minimal` / `high` (끄기 / 켜기) | `minimal` |
+
+**Gemini 기본값을 `minimal`에서 `medium`으로 올렸다 (세션 7).**
+세션 7 실측에서 모드를 올려도 **한도에는 아무 영향이 없음**이 확인됐다 —
+같은 질문에서 입력 토큰이 54로 동일했고(한도는 입력만 센다), 하루 사용량도
+요청 1회로 같다. 대가는 응답 시간뿐이다.
+
+| Gemini 모드 | 사고 토큰 | 답변 토큰 | 응답 시간 |
+|---|---|---|---|
+| `minimal` | 0 | 850 | 4.4초 |
+| **`medium` (새 기본값)** | 797 | 857 | **6.6초** |
+| `high` | 1,360 | 823 | 8.6초 |
+
+`minimal` 대비 2.2초를 더 쓰는 대신 한 번 더 생각한 답을 받는다. 무료 티어라
+비용도 늘지 않는다. Gemini는 출력 상한이 4,096이라 사고 토큰이 답변 자리를
+빼앗지도 않는다 (사고 1,360 + 답변 823 = 2,183).
 
 - Gemini 3.x에는 "사고 없음"이 없다. `minimal`이 바닥값이며 완전 비활성화는 불가능하다.
   `minimal`은 3.5 Flash-Lite의 API 기본값이다. **Gemma는 다르다 — 아무것도 지정하지
   않으면 사고가 켜진 채로 동작한다 (세션 2 실측 A-4). `client.py`는 모든 요청에
   `thinking_config`를 명시적으로 보낸다.**
 - Gemma 4는 켜기/끄기만 지원한다 (`medium` 없음).
+- **Gemma는 기본 꺼짐을 유지한다.** 세션 7 실측에서 사고를 켜자 사고 745 +
+  답변 1,300 = 2,045 로 출력 상한 2,048 에 걸려 **답변이 잘렸다.** Gemini와 달리
+  Gemma는 출력 상한이 좁아 사고 토큰이 답변 자리를 그대로 빼앗는다.
+  생성 시간도 45.5초 → 57.5초로 늘었다. 켜려면 출력 상한을 함께 올려야 한다
 - **사고 토큰은 TPM에 산입되지 않는다** (세션 2 실측으로 확정, 1.4절). 다만 두 가지는
   여전히 영향받는다: (1) `max_output_tokens` 예산에서 차감되므로 출력 한도가 작으면
   사고만 하다 잘려 빈 응답이 나올 수 있고, (2) 응답 생성 시간이 늘어 체감 지연이
@@ -99,7 +118,7 @@ class ModelSpec:
     family: str                       # "gemini3" | "gemma4"
     is_default: bool
     thinking_levels: tuple[str, ...]  # ("minimal","medium","high") | ("minimal","high")
-    default_thinking_level: str       # 항상 "minimal"
+    default_thinking_level: str       # Gemini "medium" / Gemma "minimal" (1.2절)
     supports_system_instruction: bool
     default_system_instruction: str   # 모델별 기본 인스트럭션 (2.6.2절). 없으면 ""
     supports_file_input: bool         # 2.9절 — v1에서는 UI 게이팅용으로만 사용

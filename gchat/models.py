@@ -41,7 +41,8 @@ class ModelSpec:
     family: str  # FAMILY_GEMINI3 | FAMILY_GEMMA4
     is_default: bool
     thinking_levels: tuple[str, ...]  # ("minimal","medium","high") | ("minimal","high")
-    default_thinking_level: str  # 항상 "minimal"
+    # 계획서 1.2절 — Gemini 는 medium, Gemma 는 minimal (세션 7 실측 반영)
+    default_thinking_level: str
     supports_system_instruction: bool
     # 계획서 2.6.2절 — 모델별 기본 시스템 인스트럭션. 없으면 "".
     # 세션 6 이후로는 **길이 지시** 역할만 한다. 용도 프리셋(범용·코딩) 문구 뒤에
@@ -170,7 +171,10 @@ MODELS: tuple[ModelSpec, ...] = (
         family=FAMILY_GEMINI3,
         is_default=True,
         thinking_levels=("minimal", "medium", "high"),
-        default_thinking_level="minimal",
+        # 세션 7 실측: 모드를 올려도 한도에는 영향이 없다 (입력 토큰 동일).
+        # 대가는 응답 시간 +2.2초뿐이고 출력 상한 4,096 이 넉넉해 답변이 잘리지도
+        # 않는다. 그래서 기본을 medium 으로 올렸다 (계획서 1.2절).
+        default_thinking_level="medium",
         supports_system_instruction=True,
         # 자연 답변이 약 1,000토큰으로 적당하다. 개입하지 않는다 (계획서 2.6.2절).
         default_system_instruction="",

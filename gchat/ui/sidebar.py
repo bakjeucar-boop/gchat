@@ -30,6 +30,30 @@ VOLATILE_WARNING = (
 
 S_EDITING_TITLE = "editing_title_id"
 
+# 대화 목록 모양 (세션 7 피드백).
+# - 제목은 설명 문구(st.caption)와 같은 크기로 줄이고 왼쪽 정렬한다.
+#   기본 버튼 글자는 본문 크기라 상자가 커지고 가운데로 몰려 보기 나빴다
+# - 활성 대화는 앞의 닷(●) 대신 굵게로 표시한다
+# - ✏️ 🗑 은 좁은 칸에서 오른쪽으로 치우쳐 보여 가운데로 고정한다
+_LIST_CSS = """
+<style>
+  [class*="st-key-open_"] button {
+    font-size: 0.875rem;  /* st.caption 과 같은 크기 */
+    justify-content: flex-start;
+    text-align: left;
+    padding: 0.25rem 0.5rem;
+    min-height: 0;
+  }
+  [class*="st-key-open_active_"] button { font-weight: 700; }
+  [class*="st-key-edit_"] button,
+  [class*="st-key-delete_"] button {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+</style>
+"""
+
 
 def render(
     book: QuotaBook,
@@ -69,6 +93,7 @@ def _render_conversations() -> None:
         st.caption("대화가 없습니다. 아래 입력창에 질문을 적으면 시작됩니다.")
         return
 
+    st.markdown(_LIST_CSS, unsafe_allow_html=True)
     st.subheader(f"대화 {len(conversations)}개", divider="gray")
     active_id = state.active_conversation().id if state.active_conversation() else None
 
