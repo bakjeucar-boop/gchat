@@ -18,6 +18,7 @@ from gchat.models import (
     MODELS,
     MODELS_BY_ID,
     PURPOSE_CODING,
+    PURPOSE_CUSTOM,
     PURPOSE_GENERAL,
     PURPOSE_INSTRUCTIONS,
     SAFETY_MARGIN,
@@ -27,15 +28,20 @@ from gchat.models import (
     default_model,
     get_model,
     length_instruction,
+    max_output_for,
     max_request_tokens,
     model_ids,
     models_in_family,
     requests_per_minute_at,
     resolve_thinking_level,
     thinking_label,
+    tpm_boundary_budget,
 )
 
 # 계획서 1.1절 표
+GEMINI = "gemini-3.5-flash-lite"
+GEMMA = "gemma-4-31b-it"
+
 EXPECTED_LIMITS = {
     "gemini-3.5-flash-lite": (15, 250_000, 500),
     "gemma-4-31b-it": (30, 16_000, 14_400),
@@ -46,8 +52,8 @@ EXPECTED_LIMITS = {
 # Gemma 는 세션 4 실사용 후 3,000·768 에서 상향됐다.
 EXPECTED_BUDGETS = {
     "gemini-3.5-flash-lite": (32_000, 4_096),
-    "gemma-4-31b-it": (9_000, 4_096),
-    "gemma-4-26b-a4b-it": (9_000, 4_096),
+    "gemma-4-31b-it": (9_000, 2_048),
+    "gemma-4-26b-a4b-it": (9_000, 2_048),
 }
 
 # 세션 2 실측 (models.get) — (context_window, max_output_tokens)
@@ -217,6 +223,34 @@ def test_Gemma는_간결하게_쓰라는_기본_인스트럭션을_갖는다(spe
     # 세션 5 재개정의 핵심은 하한 지시다. 상한만 주면 모델이 계속 아래로 내려간다.
     assert "너무 짧게 줄이지 말고" in instruction
     assert "1,600~2,400자" in instruction  # = 1,000~1,500 토큰 (2.2절 상수 1.6자/토큰)
+
+
+def test_출력_상한은_용도별이다():
+    """계획서 1.4절 — 범용·커스텀은 모델 기본값, 코딩만 올린다."""
+    assert max_output_for(GEMMA, PURPOSE_GENERAL) == 2_048
+    assert max_output_for(GEMMA, PURPOSE_CUSTOM) == 2_048
+    assert max_output_for(GEMMA, PURPOSE_CODING) == 4_096
+    # Gemini 는 기본값이 이미 4,096 이라 코딩에서도 그대로다
+    assert max_output_for(GEMINI, PURPOSE_GENERAL) == 4_096
+    assert max_output_for(GEMINI, PURPOSE_CODING) == 4_096
+
+
+def test_용도별_상한은_모델_자체_상한을_넘지_않는다():
+    for spec in MODELS:
+        for purpose in (PURPOSE_GENERAL, PURPOSE_CODING, PURPOSE_CUSTOM):
+            assert max_output_for(spec.id, purpose) <= spec.max_output_tokens
+
+
+def test_TPM_병목_경계를_유도한다():
+    """계획서 1.5절 — 경계 = (답변 토큰 ÷ 초당 토큰) × (가용 TPM ÷ 60)."""
+    # Gemma: (1,301 ÷ 34.2) × (14,400 ÷ 60) = 38.0초 × 240 ≈ 9,100
+    assert tpm_boundary_budget(GEMMA) == pytest.approx(9_100, abs=60)
+    # 답변이 짧아지면 경계도 내려간다 (세션 5 과소 생성 시절 435토큰 → 약 3,100)
+    assert tpm_boundary_budget(GEMMA, 435) == pytest.approx(3_050, abs=60)
+    # 상한을 다 채우면 슬라이더 상한에 닿는다
+    assert tpm_boundary_budget(GEMMA, 2_048) >= 14_000
+    # Gemini 는 TPM 이 넓어 경계가 예산 범위를 한참 넘는다
+    assert tpm_boundary_budget(GEMINI) > 100_000
 
 
 def test_코딩_용도에서는_글자수_목표를_주지_않는다():

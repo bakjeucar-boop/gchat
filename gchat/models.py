@@ -108,8 +108,26 @@ PURPOSE_INSTRUCTIONS: dict[str, str] = {
 }
 
 
+# 계획서 1.4·2.6.2절 — 코딩 용도의 출력 상한.
+# 코드는 중간에 잘리면 쓸모가 없어 길이 목표 자체를 두지 않으므로, 상한도
+# 일상 대화 기준(Gemma 2,048)으로 묶어두면 안 된다 (세션 6 실사용).
+CODING_MAX_OUTPUT = 4_096
+
+
 def purpose_label(purpose: str) -> str:
     return PURPOSE_LABELS.get(purpose, purpose)
+
+
+def max_output_for(model_id: str, purpose: str) -> int:
+    """용도별 출력 상한 (계획서 1.4절).
+
+    범용·커스텀은 모델 기본값을 그대로 쓴다 — 일상 답변까지 4,096 을 허용할
+    이유가 없다. 코딩일 때만 올리되 모델 자체 상한을 넘지 않는다.
+    """
+    spec = get_model(model_id)
+    if purpose != PURPOSE_CODING:
+        return spec.default_max_output
+    return min(spec.max_output_tokens, max(spec.default_max_output, CODING_MAX_OUTPUT))
 
 
 def length_instruction(model_id: str, purpose: str) -> str:
@@ -186,10 +204,9 @@ MODELS: tuple[ModelSpec, ...] = (
         # TPM 은 실제로 걸리지 않았다 — 6턴 내내 대기 0회, 창 사용률 29%.
         # 예산 9,000 의 TPM상 최소 간격 37.5초 < 출력 1,536 의 생성 시간 약 50초.
         default_context_budget=9_000,
-        # 768 → 1,536 → 2,048 → 4,096 (세션 6 코딩 피드백으로 재상향).
-        # 코딩 답변은 코드가 길어 2,048 에서 잘렸다. 이 값은 안전장치이고
-        # 실제 길이를 정하는 것은 용도별 길이 지시다 (계획서 2.6.2절).
-        default_max_output=4_096,
+        # 768 → 1,536 → 2,048 (계획서 1.4절). 일상 대화의 안전장치다.
+        # 코딩 용도에서는 max_output_for() 가 CODING_MAX_OUTPUT 으로 올린다.
+        default_max_output=2_048,
         price_in_per_mtok=None,
         price_out_per_mtok=None,
     ),
@@ -208,7 +225,7 @@ MODELS: tuple[ModelSpec, ...] = (
         context_window=262_144,
         limits=RateLimits(rpm=30, tpm=16_000, rpd=14_400),
         default_context_budget=9_000,
-        default_max_output=4_096,
+        default_max_output=2_048,
         price_in_per_mtok=None,
         price_out_per_mtok=None,
     ),
@@ -266,6 +283,31 @@ def max_request_tokens(model_id: str) -> int:
     출력과 사고 토큰은 TPM 을 소비하지 않으므로 이 계산에 넣지 않는다.
     """
     return int(get_model(model_id).limits.tpm * SAFETY_MARGIN)
+
+
+# 계획서 1.5절 — 세션 6 실측. 이 두 값에서 TPM 병목 경계를 유도한다.
+GENERATION_TOKENS_PER_SECOND = 34.2
+TYPICAL_OUTPUT_TOKENS = 1_301
+
+
+def tpm_boundary_budget(model_id: str, output_tokens: int = TYPICAL_OUTPUT_TOKENS) -> int:
+    """TPM 이 병목이 되기 시작하는 컨텍스트 예산 (계획서 1.5절).
+
+    TPM 대기는 "TPM상 최소 간격 > 생성 시간"일 때만 생긴다. 생성 시간은
+    답변 길이 ÷ 생성 속도이고, TPM상 최소 간격은 예산 ÷ (가용 TPM ÷ 60)이다.
+    둘이 같아지는 지점이 경계다.
+
+        경계 예산 = (답변 토큰 ÷ 초당 토큰) × (가용 TPM ÷ 60)
+
+    상수로 박지 않고 여기서 유도하는 이유는, 답변 길이가 바뀌면 경계도
+    따라 움직이기 때문이다. 세션 5 에서 11,000 이라 적었던 것은 출력 1,536 을
+    매번 채운다는 가정에서 나온 값이고, 실제 답변이 1,301 토큰으로 안착하면서
+    경계가 9,100 으로 내려왔다.
+    """
+    if output_tokens <= 0:
+        return max_request_tokens(model_id)
+    seconds = output_tokens / GENERATION_TOKENS_PER_SECOND
+    return int(seconds * max_request_tokens(model_id) / 60)
 
 
 def requests_per_minute_at(model_id: str, context_budget: int) -> float:

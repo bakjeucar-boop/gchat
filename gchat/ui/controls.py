@@ -15,10 +15,15 @@ import math
 import streamlit as st
 
 from gchat import state
-from gchat.context import count_excluded, estimate_messages, estimate_tokens
+from gchat.context import (
+    average_output_tokens,
+    count_excluded,
+    estimate_messages,
+    estimate_tokens,
+    tokens_per_turn,
+)
 from gchat.models import (
     FAMILY_GEMMA4,
-    PURPOSE_CODING,
     PURPOSE_CUSTOM,
     PURPOSE_GENERAL,
     PURPOSES,
@@ -29,14 +34,10 @@ from gchat.models import (
     model_ids,
     purpose_label,
     thinking_label,
+    tpm_boundary_budget,
 )
 from gchat.quota import QuotaBook
 from gchat.state import Conversation
-
-# 계획서 1.5절 — 턴당 컨텍스트 증가 (사용자 입력 약 200 + 출력)
-TOKENS_PER_TURN = 1_750
-# 이 값을 넘으면 TPM 대기가 실제로 발생하기 시작한다 (계획서 1.5절, 세션 5 실측 반영)
-WAIT_FREE_BUDGET = 11_000
 
 BUDGET_MIN = 1_000
 BUDGET_STEP = 500
@@ -128,18 +129,6 @@ def _render_thinking(spec: ModelSpec, conv: Conversation) -> None:
     )
 
 
-def _tokens_per_turn(spec: ModelSpec, purpose: str) -> int:
-    """턴당 컨텍스트 증가 추정.
-
-    범용은 계획서 1.5절 값(1,750)을 쓴다 — 세션 6 실측(출력 약 1,300 + 입력 약
-    200)과 비슷하다. 코딩은 길이 지시를 주지 않아 출력이 상한까지 가는 일이
-    잦으므로 상한 기준으로 잡는다. 그래야 "약 N턴"이 거짓말이 되지 않는다.
-    """
-    if purpose == PURPOSE_CODING:
-        return spec.default_max_output + 200
-    return TOKENS_PER_TURN
-
-
 def _render_budget(spec: ModelSpec, conv: Conversation) -> None:
     """Gemma 일 때만. 슬라이더 옆에는 대기 시간이 아니라 **턴 수**를 보인다."""
     ceiling = max_request_tokens(spec.id)  # TPM 의 90% — 테이블에서 유도한다
@@ -155,11 +144,14 @@ def _render_budget(spec: ModelSpec, conv: Conversation) -> None:
     )
     conv.settings.context_budget = chosen
 
-    per_turn = _tokens_per_turn(spec, conv.settings.purpose)
+    # 계획서 1.5절 — 상수가 아니라 이 대화의 실측 평균으로 계산한다.
+    per_turn = tokens_per_turn(conv.messages)
     st.caption(f"약 {max(1, chosen // per_turn)}턴 유지 (턴당 약 {per_turn:,} 토큰)")
 
-    if chosen > WAIT_FREE_BUDGET:
-        st.warning(f"{WAIT_FREE_BUDGET:,}부터는 요청 사이에 대기가 생깁니다.", icon="⚠️")
+    # 경계도 유도한다. 답변이 길어지면 생성 시간이 늘어 경계가 위로 움직인다.
+    boundary = tpm_boundary_budget(spec.id, average_output_tokens(conv.messages))
+    if chosen > boundary:
+        st.warning(f"{boundary:,}부터는 요청 사이에 대기가 생길 수 있습니다.", icon="⚠️")
 
     # 계획서 2.6.1.1절 — 줄일 때만 사전 안내한다.
     if chosen < previous:

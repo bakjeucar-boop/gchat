@@ -21,7 +21,7 @@ from typing import Any
 from google import genai
 from google.genai import types
 
-from gchat.models import get_model, resolve_thinking_level
+from gchat.models import get_model, max_output_for, resolve_thinking_level
 from gchat.state import Conversation, Message, Settings
 
 # --- 예외 -------------------------------------------------------------------
@@ -235,7 +235,8 @@ def build_config(model_id: str, settings: Settings) -> types.GenerateContentConf
     spec = get_model(model_id)
     level = resolve_thinking_level(model_id, settings.thinking_level)
     kwargs: dict[str, Any] = {
-        "max_output_tokens": spec.default_max_output,
+        # 용도별 상한 (계획서 1.4절 — 코딩일 때만 올라간다)
+        "max_output_tokens": max_output_for(model_id, settings.purpose),
         # 항상 명시한다. 생략 시 Gemma 는 사고가 켜진다 (실측 A-4).
         "thinking_config": types.ThinkingConfig(thinking_level=level),
     }

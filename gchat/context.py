@@ -13,7 +13,7 @@ import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
-from gchat.models import get_model, max_request_tokens
+from gchat.models import TYPICAL_OUTPUT_TOKENS, get_model, max_request_tokens
 from gchat.state import Message
 
 # 계획서 2.2절 확정치 (세션 2 실측: 한국어 1.63~1.70, 영어 3.63).
@@ -179,6 +179,34 @@ def fit_to_budget(
         tokens=tokens,
         used_exact_count=exact,
     )
+
+
+# 계획서 1.5절 — 표본이 없을 때 쓰는 턴 크기 (세션 6 실측: 입력 200 + 출력 1,301).
+DEFAULT_TOKENS_PER_TURN = 1_500
+
+
+def tokens_per_turn(messages: Sequence[Message]) -> int:
+    """이 대화의 **실제 평균 턴 크기** (계획서 1.5절).
+
+    모델 응답에 기록된 입력 토큰(그 요청 시점의 컨텍스트 크기)의 증가폭을 본다.
+    상수로 두면 사용자가 인스트럭션을 바꾸거나 커스텀 프리셋을 쓸 때 표시가
+    어긋나는데, 실측 평균은 스스로 따라온다.
+
+    표본이 2개 미만이거나 절단으로 컨텍스트가 오히려 줄었으면 기본값을 쓴다.
+    """
+    marks = [m.in_tokens for m in messages if m.role == "model" and m.in_tokens]
+    if len(marks) < 2:
+        return DEFAULT_TOKENS_PER_TURN
+    growth = (marks[-1] - marks[0]) / (len(marks) - 1)
+    return round(growth) if growth > 0 else DEFAULT_TOKENS_PER_TURN
+
+
+def average_output_tokens(messages: Sequence[Message]) -> int:
+    """이 대화의 평균 답변 길이. TPM 경계 계산에 쓴다 (계획서 1.5절)."""
+    outputs = [m.out_tokens for m in messages if m.role == "model" and m.out_tokens]
+    if not outputs:
+        return TYPICAL_OUTPUT_TOKENS
+    return round(sum(outputs) / len(outputs))
 
 
 def single_input_too_large(text: str, model_id: str) -> bool:
