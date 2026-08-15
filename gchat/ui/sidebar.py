@@ -38,10 +38,13 @@ S_EDITING_TITLE = "editing_title_id"
 _LIST_CSS = """
 <style>
   [class*="st-key-open_"] button {
-    font-size: 0.875rem;  /* st.caption 과 같은 크기 */
+    /* 설정 라벨·캡션이 모두 14px 이라 그 크기로는 지금과 달라 보이지 않는다.
+       목록은 훑어보는 곳이므로 한 단계 더 줄이고 상자도 함께 낮춘다. */
+    font-size: 0.75rem;
+    line-height: 1.35;
     justify-content: flex-start;
     text-align: left;
-    padding: 0.25rem 0.5rem;
+    padding: 0.15rem 0.45rem;
     min-height: 0;
   }
   [class*="st-key-open_active_"] button { font-weight: 700; }
