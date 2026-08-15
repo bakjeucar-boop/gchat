@@ -101,14 +101,15 @@ def _render_conversations() -> None:
         # 아이콘 칸을 좁게 잡으면 버튼 상자가 이모지를 다 담지 못해 밖으로 삐져
         # 나온다 (세션 6 피드백). 여유를 주고 두 버튼 다 칸을 채우게 한다.
         open_col, edit_col, delete_col = st.columns([5, 1.4, 1.4], vertical_alignment="center")
-        marker = "● " if conv.id == active_id else ""
         # 계획서 2.4절 — 목록은 훑어보는 곳이므로 작은 글씨로, 전체 제목은 툴팁으로.
         tooltip = (
             f"{conv.title}\n\n{get_model(conv.model_id).label} · 메시지 {len(conv.messages)}개"
         )
+        # 활성 대화는 키 접두사로 구분해 CSS 에서 굵게 만든다 (앞의 닷 표시 대신).
+        open_key = f"open_active_{conv.id}" if conv.id == active_id else f"open_{conv.id}"
         if open_col.button(
-            f"{marker}{conv.display_title()}",
-            key=f"open_{conv.id}",
+            conv.display_title(),
+            key=open_key,
             width="stretch",
             help=tooltip,
         ):
