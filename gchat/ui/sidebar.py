@@ -71,6 +71,7 @@ def render(
     conv: Conversation,
     *,
     export_section: Callable[[], None] | None = None,
+    confirm_export: Callable[[Conversation], None] | None = None,
 ) -> None:
     """세션 6 실사용 피드백으로 순서를 바꿨다.
 
@@ -85,7 +86,7 @@ def render(
             export_section()
         _render_bulk_delete()
         _render_quota(book)
-        controls.render_settings(conv)
+        controls.render_settings(conv, confirm_export=confirm_export)
 
 
 def _render_new_conversation() -> None:

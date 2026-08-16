@@ -70,11 +70,17 @@ def render_badge(book: QuotaBook, conv: Conversation) -> None:
 # --- 사이드바 "설정" (계획서 2.6.1.1절) -------------------------------------------
 
 
-def render_settings(conv: Conversation) -> None:
-    """조작 컨트롤. 사이드바 맨 아래에 접힌 채로 둔다 (세션 6 피드백)."""
+def render_settings(conv: Conversation, *, confirm_export=None) -> None:
+    """조작 컨트롤. 사이드바 맨 아래에 접힌 채로 둔다 (세션 6 피드백).
+
+    계열 전환 확인은 **모델 드롭다운 바로 아래**에서 그린다. 본문 위쪽에 두면
+    긴 대화에서 화면 밖(실측: 6,220px 위)에 놓여 보이지 않는다 — 멈춤 버튼과
+    같은 결함이었다 (세션 8 실측).
+    """
     with st.expander("설정", expanded=False):
         spec = state.active_model()
         _render_model(conv)
+        render_family_confirmation(conv, export_button=confirm_export)
         _render_thinking(spec, conv)
         if spec.family == FAMILY_GEMMA4:
             _render_budget(spec, conv)
@@ -220,7 +226,12 @@ def _fill_default_instruction(settings, model_id: str, widget_key: str) -> None:
 
 
 def render_family_confirmation(conv: Conversation, *, export_button=None) -> None:
-    """본문 위쪽에 띄운다. 사이드바보다 눈에 잘 띄고 3버튼이 들어갈 자리가 넉넉하다.
+    """모델 드롭다운 바로 아래에 띄운다 (세션 8 정정).
+
+    처음에는 본문 위쪽에 뒀지만, 사용자는 방금 읽은 답변 끝에 있고 확인 창은
+    대화 맨 위에 그려져 화면 밖에 있었다 — "확인창이 안 뜬다"로 나타났다.
+    조작한 위젯 옆이라면 스크롤 위치와 무관하게 항상 보인다. 사이드바는
+    좁으므로 버튼을 가로로 나누지 않고 세로로 쌓는다.
 
     두 버튼 모두 **on_click 콜백**으로 처리한다. 확정도 취소도 selectbox 의 키
     (`ui_model_id`)를 되돌려야 하는데, 위젯이 이미 그려진 뒤에 그 키를 대입하면
@@ -237,20 +248,18 @@ def render_family_confirmation(conv: Conversation, *, export_button=None) -> Non
         f"대화 내용은 이 세션 안에서만 보관되므로, 필요하면 지금 Markdown으로 "
         f"내려받으세요. (전환해도 이전 대화는 사이드바에 남습니다)"
     )
-    save_col, go_col, cancel_col = st.columns(3)
-    with save_col:
-        if export_button is not None:
-            export_button(conv)
-        else:
-            st.button("Markdown으로 저장", disabled=True, width="stretch")
-    go_col.button(
+    if export_button is not None:
+        export_button(conv)
+    else:
+        st.button("Markdown으로 저장", disabled=True, width="stretch")
+    st.button(
         "저장했음 · 전환",
         type="primary",
         width="stretch",
         on_click=_confirm_family_switch,
         args=(conv, pending, target.label),
     )
-    cancel_col.button(
+    st.button(
         "취소",
         width="stretch",
         on_click=state.revert_model_selection,  # 드롭다운을 이전 모델로 되돌린다

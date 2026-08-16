@@ -62,17 +62,17 @@ if client is None:
     )
 
 # 순서가 화면 배치다 (계획서 2.6절).
-# 조작은 사이드바 설정, 본문은 확인 블록 → 대화 이력 → 표시 전용 배지 → 입력창.
+# 조작은 사이드바 설정, 본문은 대화 이력 → 표시 전용 배지 → 입력창.
+# 계열 전환 확인은 사이드바의 모델 드롭다운 바로 아래에서 그린다 — 본문 위쪽에
+# 두면 긴 대화에서 화면 밖에 놓여 보이지 않았다 (세션 8 실측).
 conversation = state.ensure_conversation()
 sidebar.render(
     book,
     conversation,
     export_section=lambda: export_ui.render_sidebar_export(conversation),
+    confirm_export=export_ui.render_confirmation_export,
 )
 
-controls.render_family_confirmation(
-    conversation, export_button=export_ui.render_confirmation_export
-)
 controls.drain_notes()
 chat.render_history(conversation)
 controls.render_badge(book, conversation)
