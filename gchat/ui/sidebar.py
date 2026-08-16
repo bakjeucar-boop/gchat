@@ -39,9 +39,9 @@ _LIST_CSS = """
 <style>
   [class*="st-key-open_"] button {
     /* 설정 라벨·캡션이 모두 14px 이라 그 크기로는 지금과 달라 보이지 않는다.
-       목록은 훑어보는 곳이므로 10px 까지 줄이고 상자도 함께 낮춘다 (세션 7 피드백). */
-    font-size: 0.625rem;
-    line-height: 1.35;
+       목록은 훑어보는 곳이므로 11px 까지 줄이고 상자도 함께 낮춘다 (세션 8 조정). */
+    font-size: 0.6875rem;
+    line-height: 1.4;
     justify-content: flex-start;
     text-align: left;
     padding: 0.15rem 0.45rem;
@@ -51,8 +51,8 @@ _LIST_CSS = """
      font-size 를 16px 로 다시 잡는다. 여기를 지정하지 않으면 button 에 건
      크기는 실제 글자에 닿지 않고 상자만 줄어든다 (세션 7 실측). */
   [class*="st-key-open_"] button p {
-    font-size: 0.625rem;
-    line-height: 1.35;
+    font-size: 0.6875rem;
+    line-height: 1.4;
     margin: 0;
   }
   [class*="st-key-open_active_"] button { font-weight: 700; }
@@ -212,9 +212,11 @@ def _render_quota(book: QuotaBook) -> None:
     st.subheader("한도", divider="gray")
     st.caption(spec.label)
 
+    # 표시되는 값은 토큰이다. "분당 글자"라고 부르면 한국어 기준 약 1.6배 틀린
+    # 표시가 되므로 단위를 주장하지 않는 이름을 쓴다 (계획서 2.7.1절).
     tpm_text = f"{_compact(gauges.input_tokens_in_window)} / {_compact(gauges.tpm_limit)}"
     tpm_label = (
-        f"**분당 글자** {tpm_text}" if spec.family == FAMILY_GEMMA4 else f"분당 글자 {tpm_text}"
+        f"**분당 사용량** {tpm_text}" if spec.family == FAMILY_GEMMA4 else f"분당 사용량 {tpm_text}"
     )
     bars = [
         (tpm_label, _ratio(gauges.input_tokens_in_window, gauges.tpm_limit)),
@@ -235,6 +237,6 @@ def _render_quota(book: QuotaBook) -> None:
         st.progress(value, text=label)
 
     st.caption(
-        "질문과 지난 대화가 길수록 '분당 글자'가 빨리 찹니다. "
+        "질문과 지난 대화가 길수록 '분당 사용량'이 빨리 찹니다. "
         "여기 숫자는 앱이 세는 추정치라 실제와 조금 다를 수 있습니다."
     )

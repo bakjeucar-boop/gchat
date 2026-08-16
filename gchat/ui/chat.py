@@ -159,7 +159,7 @@ def _render_messages(conv: Conversation) -> None:
     for index, message in enumerate(conv.messages):
         if message.truncated_from_context and not shown_truncation_note:
             trimmed = sum(1 for m in conv.messages if m.truncated_from_context)
-            st.info(f"길이 제한 때문에 앞선 대화 {trimmed}개는 이번 답변에 참고되지 않습니다.")
+            st.info(f"길이 제한 때문에 앞선 메시지 {trimmed}개는 이번 답변에 참고되지 않습니다.")
             shown_truncation_note = True
         avatar = "user" if message.role == "user" else "assistant"
         with st.chat_message(avatar):
@@ -217,7 +217,9 @@ def _render_message_meta(message: Message) -> None:
         return
     bits = []
     if message.in_tokens is not None:
-        bits.append(f"질문 {message.in_tokens:,} · 답변 {message.out_tokens or 0:,} 글자분")
+        # 이 숫자도 토큰이다. "글자분"이라고 부르면 게이지와 같은 단위 오류가
+        # 되므로 단위를 주장하지 않는다 (계획서 2.7.1절).
+        bits.append(f"사용량 질문 {message.in_tokens:,} · 답변 {message.out_tokens or 0:,}")
     if message.latency_s is not None:
         bits.append(f"{message.latency_s:.1f}초")
     if bits:
@@ -248,7 +250,7 @@ def _send(conv: Conversation, client: GeminiClient, book: QuotaBook) -> None:
         count_exact=lambda messages: client.count_tokens(model_id, messages),
     )
     if trim.truncated:
-        st.info(f"길이 제한 때문에 앞선 대화 {trim.trimmed}개는 이번 답변에 참고되지 않습니다.")
+        st.info(f"길이 제한 때문에 앞선 메시지 {trim.trimmed}개는 이번 답변에 참고되지 않습니다.")
 
     tracker = book.tracker(model_id)
     verdict = tracker.precheck(trim.tokens)

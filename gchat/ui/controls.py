@@ -165,7 +165,7 @@ def _render_budget(spec: ModelSpec, conv: Conversation) -> None:
             conv.messages, chosen, system_instruction=conv.settings.system_instruction
         )
         if excluded:
-            st.info(f"이 값으로 줄이면 앞선 대화 {excluded}개는 다음 답변에 참고되지 않습니다.")
+            st.info(f"이 값으로 줄이면 앞선 메시지 {excluded}개는 다음 답변에 참고되지 않습니다.")
 
 
 def _render_purpose(spec: ModelSpec, conv: Conversation) -> None:
