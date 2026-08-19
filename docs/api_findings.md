@@ -1,5 +1,10 @@
 # API 실측 결과 (세션 2)
 
+> **이 파일은 2026-08-13자 관측 기록이며 갱신되지 않습니다.**
+> 재측정은 이 파일을 고치지 않고 `docs/archive/api_findings_YYYYMMDD.md`로
+> 새 파일을 만듭니다. 현재 값은 기술서 7장에 있고, 이 파일은 그 원본입니다
+> (기술서 완성 시 `docs/archive/`로 이동).
+
 측정일: 2026-08-13 (KST)
 측정 도구: `scripts/probe_models.py`
 SDK: `google-genai` 1.65.0 / Python 3.12.10

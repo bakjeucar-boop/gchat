@@ -13,6 +13,7 @@
     python scripts/probe_models.py turns       # 한국어 턴당 토큰 (부록 B-3)
     python scripts/probe_models.py tpm         # TPM 산정 기준 (부록 B-1,2,8)
     python scripts/probe_models.py grounding   # 검색 그라운딩 (2.10절, 부록 B-11~13)
+    python scripts/probe_models.py modes       # 응답 모드별 토큰·시간·잘림 (기술서 7.3절)
 
 비용 주의: thinking / stream / grounding 은 짧은 프롬프트와 작은 max_output_tokens
 로 제한한다. turns 와 tpm 만 의도적으로 토큰을 쓴다.
@@ -536,6 +537,83 @@ def cmd_grounding() -> dict[str, Any]:
     return out
 
 
+# --- 응답 모드 (기술서 7.3절) --------------------------------------------------
+#
+# 세션 7 측정을 재현한다. 이 측정은 임시 스크립트로 한 번 재고 버렸다가
+# 기술서 7장을 쓰면서 여기로 옮겼다 — 모델이 바뀌면 다시 재야 하는 값이다.
+#
+# 짧은 프롬프트(1+1)로는 사고가 거의 일어나지 않아 모드 차이가 드러나지 않는다.
+# 설명을 요구하는 질문이어야 한다.
+MODE_PROMPT = "태양광 인버터의 DC/AC 비율을 정하는 기준을 설명해 주세요."
+
+# max_output 은 앱의 모델별 기본값(models.py default_max_output)과 같게 둔다.
+# Gemma high 의 잘림은 이 상한과 사고 토큰의 관계에서 나오므로 값을 바꾸면
+# 재현되지 않는다.
+MODE_CASES = (
+    ("gemini-3.5-flash-lite", "minimal", 4_096),
+    ("gemini-3.5-flash-lite", "medium", 4_096),
+    ("gemini-3.5-flash-lite", "high", 4_096),
+    ("gemma-4-31b-it", "minimal", 2_048),
+    ("gemma-4-31b-it", "high", 2_048),
+)
+
+
+def cmd_modes() -> dict[str, Any]:
+    """응답 모드가 한도·응답 시간·잘림에 주는 영향을 잰다.
+
+    확인할 것은 세 가지다.
+    - **입력 토큰이 모드와 무관하게 같은가.** 같다면 응답 모드는 TPM 에
+      영향을 주지 않는다 (TPM 은 입력만 센다 — cmd_tpm 참조)
+    - 응답 시간이 얼마나 늘어나는가. 모드를 올리는 대가는 이것뿐이어야 한다
+    - 사고 토큰이 max_output 을 잠식해 답변이 잘리는가. Gemma 는 상한이
+      좁아 사고를 켜면 잘린다
+
+    비용 주의: 5회 호출이고 출력을 상한까지 쓸 수 있다. tpm/turns 다음으로 무겁다.
+    """
+    cli = client()
+    out: dict[str, Any] = {}
+    for model_id, level, max_out in MODE_CASES:
+        key = f"{model_id}:{level}"
+        started = time.monotonic()
+        try:
+            resp = cli.models.generate_content(
+                model=model_id,
+                contents=MODE_PROMPT,
+                config=types.GenerateContentConfig(
+                    max_output_tokens=max_out,
+                    thinking_config=thinking_config(level),
+                ),
+            )
+            elapsed = time.monotonic() - started
+            finish = str(resp.candidates[0].finish_reason) if resp.candidates else None
+            counts = usage(resp)
+            out[key] = {
+                "ok": True,
+                "max_output_tokens": max_out,
+                "elapsed_s": round(elapsed, 1),
+                "input_tokens": counts.get("prompt_token_count"),
+                "thoughts_tokens": counts.get("thoughts_token_count") or 0,
+                "output_tokens": counts.get("candidates_token_count") or 0,
+                "finish_reason": finish,
+                "truncated": bool(finish and finish.endswith("MAX_TOKENS")),
+                "text_head": (resp.text or "")[:80],
+            }
+        except Exception as exc:  # noqa: BLE001
+            out[key] = {"ok": False, "max_output_tokens": max_out, "error": err(exc)}
+        time.sleep(2)
+
+    # 입력 토큰이 모드와 무관하다는 것이 이 측정의 핵심이므로 따로 뽑아 둔다.
+    by_model: dict[str, list[Any]] = {}
+    for model_id, level, _ in MODE_CASES:
+        entry = out[f"{model_id}:{level}"]
+        if entry.get("ok"):
+            by_model.setdefault(model_id, []).append(entry["input_tokens"])
+    out["_input_tokens_identical_per_model"] = {
+        model_id: len(set(values)) == 1 for model_id, values in by_model.items()
+    }
+    return out
+
+
 COMMANDS = {
     "sdk": cmd_sdk,
     "list": cmd_list,
@@ -546,6 +624,7 @@ COMMANDS = {
     "turns": cmd_turns,
     "tpm": cmd_tpm,
     "grounding": cmd_grounding,
+    "modes": cmd_modes,
 }
 
 
