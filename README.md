@@ -47,7 +47,8 @@ APP_PASSWORD = "20자 이상 무작위 문자열"
 streamlit run app.py
 ```
 
-개발까지 하려면 `pip install -r requirements-dev.txt` (pytest·ruff 포함).
+개발까지 하려면 `pip install -r requirements-dev.txt`
+(pytest · ruff · 문서 빌드용 markdown-it-py 포함).
 
 ### 검사
 
@@ -59,7 +60,7 @@ ruff check .
 ### 모델 실측
 
 모델별 한도·파라미터는 문서가 서로 엇갈려서 실호출로 확인했다.
-결과는 [docs/api_findings.md](docs/api_findings.md) 에 있다.
+결과는 [docs/archive/api_findings.md](docs/archive/api_findings.md) 에 있다.
 
 ```
 python scripts/probe_models.py sdk
@@ -83,7 +84,7 @@ APP_PASSWORD = "..."
 - 무료 계정은 **비공개 앱 1개, 공개 앱 무제한**이다. 이 저장소가 공개인 이유이며,
   접근은 비밀번호 게이트가 막는다. secrets 는 저장소에 없으므로 키는 안전하다
 - **12시간 무접속이면 앱이 대기 상태로 내려가고, 깨어나면 대화가 모두 사라진다.**
-  고장이 아니라 대화를 세션에만 두기로 한 설계의 결과다 (계획서 6절)
+  고장이 아니라 대화를 세션에만 두기로 한 설계의 결과다 (기술서 1.1절)
 - 서버는 UTC 로 돌지만 화면과 내보내기의 시각은 KST 로 변환한다
   (`requirements.txt` 의 `tzdata` 가 이 때문에 필요하다)
 
@@ -105,11 +106,23 @@ models → state → context → quota → client → export → ui → app
 | `gchat/export.py` | Markdown 내보내기 |
 | `gchat/ui/` | 화면 조각. streamlit 위젯을 직접 다루는 유일한 계층 |
 
-요구사항·설계 근거·실측 기록은 모두
-[docs/gchat_계획서.md](docs/gchat_계획서.md) 에 있다. 코드와 문서가 어긋나면
-계획서가 기준이다.
+## 기술서
+
+이 코드를 이어받아 고치려면 기술서를 본다. 제약·설계 판단·실측·트러블슈팅이
+모두 거기 있다.
+
+- [docs/gchat_기술서.md](docs/gchat_기술서.md) — **원본**
+- [docs/gchat_기술서.html](docs/gchat_기술서.html) — 목차가 붙은 읽기용 단일 파일
+  (내려받아 브라우저로 열면 된다)
+
+빠른 안내: 코드가 왜 이런 모양인지는 **3장**, 값을 바꿔도 되는지는 **6장**,
+숫자를 언제 어떻게 쟀는지는 **7장**, 고장 사례는 **8장**이다.
+
+`docs/archive/` 의 계획서와 관측 기록은 개발 단계의 문서이며 **동결**돼 있다.
+거기 값이 지금 코드와 다르면 기술서가 맞다.
 
 ## 상태
 
-**세션 8 완료 — 배포까지 끝났다.** 대화·한도 관리·컨트롤·Markdown 내보내기·
-용도 프리셋·멈춤 버튼이 모두 동작하고, Streamlit Community Cloud 에서 돌고 있다.
+**개발 완료.** 배포됐고 통합 시험 38항목을 통과했다. 대화·한도 관리·컨트롤·
+Markdown 내보내기·용도 프리셋·멈춤 버튼이 모두 동작한다. 이후 작업은 문서와
+유지보수다.

@@ -177,7 +177,7 @@ def _render_copy(conv: Conversation, index: int, message: Message) -> None:
 
     세션 6 피드백으로 st.code 대안(펼쳐서 다시 아이콘을 누르는 2단계)에서
     navigator.clipboard 한 번 클릭으로 바꿨다. Streamlit 컴포넌트 iframe 에는
-    clipboard-write 권한이 실제로 부여되어 있다 (docs/api_findings.md B-9).
+    clipboard-write 권한이 실제로 부여되어 있다 (docs/archive/api_findings.md B-9).
     """
     if not message.content.strip():
         return

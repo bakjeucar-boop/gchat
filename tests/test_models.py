@@ -115,7 +115,7 @@ def test_계열이_계획서와_일치한다(model_id: str):
 
 @pytest.mark.parametrize("model_id", sorted(MEASURED_LIMITS))
 def test_컨텍스트_윈도우와_최대출력이_실측값과_일치한다(model_id: str):
-    """세션 2 실측값 (docs/api_findings.md A-1)."""
+    """세션 2 실측값 (docs/archive/api_findings.md A-1)."""
     spec = get_model(model_id)
     assert (spec.context_window, spec.max_output_tokens) == MEASURED_LIMITS[model_id]
 
@@ -125,7 +125,7 @@ def test_컨텍스트_예산이_TPM의_90퍼센트를_넘지_않는다(spec: Mod
     """계획서 1.4절 — TPM 을 소비하는 것은 입력, 즉 컨텍스트 예산뿐이다.
 
     세션 2 실측으로 "예산 + 최대 출력" 이 아니라 "예산" 단독 기준이 됐다
-    (docs/api_findings.md B절).
+    (docs/archive/api_findings.md B절).
     """
     assert spec.default_context_budget <= spec.limits.tpm * SAFETY_MARGIN, (
         f"{spec.id}: 예산 {spec.default_context_budget:,} 은 "

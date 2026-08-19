@@ -118,7 +118,7 @@ def test_공백은_직전_문자의_분류를_따른다():
     ],
 )
 def test_실측_표본을_과소_추정하지_않는다(text: str, measured: int):
-    """세션 2 실측 표본 (docs/api_findings.md A-2).
+    """세션 2 실측 표본 (docs/archive/api_findings.md A-2).
 
     과소 추정은 한도를 넘겨 429 를 부르는 위험한 방향이므로, 실측 이상이어야 한다.
     과대도 20% 안쪽이어야 쓸모가 있다.

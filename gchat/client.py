@@ -1,6 +1,6 @@
 """Gemini API 래퍼 (계획서 3절, 2.1 / 2.8절).
 
-세션 2 실측(docs/api_findings.md)을 그대로 반영한다.
+세션 2 실측(docs/archive/api_findings.md)을 그대로 반영한다.
 
 - `temperature` / `top_p` / `top_k` / `candidate_count` 는 어느 모델에도 보내지 않는다
   (계획서 1.2절). 이 파일에 그 이름이 등장해서는 안 된다.

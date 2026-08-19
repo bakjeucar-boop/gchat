@@ -1,6 +1,6 @@
 """세션 2 실측 스크립트 (계획서 4절 세션 2, 부록 B).
 
-문서로만 알던 값을 실호출로 확인한다. 결과는 docs/api_findings.md 에 정리하고
+문서로만 알던 값을 실호출로 확인한다. 결과는 docs/archive/api_findings.md 에 정리하고
 확정된 값만 gchat/models.py 에 반영한다.
 
 사용법:

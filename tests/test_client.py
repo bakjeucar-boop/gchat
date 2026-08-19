@@ -1,6 +1,6 @@
 """client.py 테스트 — API 를 호출하지 않는 순수 로직만 검증한다.
 
-실제 호출 결과는 docs/api_findings.md 에 있고, 여기서는 그 실측을 코드가
+실제 호출 결과는 docs/archive/api_findings.md 에 있고, 여기서는 그 실측을 코드가
 제대로 반영하는지만 본다.
 """
 
@@ -28,7 +28,7 @@ from gchat.client import (
 from gchat.models import get_model
 from gchat.state import Message, Settings
 
-# 세션 2 실측에서 실제로 받은 429 본문 (docs/api_findings.md B-3)
+# 세션 2 실측에서 실제로 받은 429 본문 (docs/archive/api_findings.md B-3)
 REAL_429 = (
     "429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current "
     "quota, please check your plan and billing details. ... \\n* Quota exceeded for metric: "

@@ -4,7 +4,7 @@
 UI · client · quota 는 이 테이블을 참조할 뿐 값을 하드코딩하지 않는다.
 새 모델을 추가할 때는 이 파일의 MODELS 만 수정한다.
 
-값의 출처는 세션 2 실측이다 (docs/api_findings.md).
+값의 출처는 세션 2 실측이다 (docs/archive/api_findings.md).
 """
 
 from __future__ import annotations
@@ -150,7 +150,7 @@ def compose_instruction(model_id: str, purpose: str) -> str:
     """용도 문구에 모델별 길이 지시를 이어붙인다 (세션 6 결정).
 
     길이 지시를 빼면 Gemma 답변이 3,000토큰으로 튀어 상한에서 잘린다
-    (세션 5·6 실측, docs/api_findings.md B-8·B-9). 용도가 바뀌어도 이 자리는
+    (세션 5·6 실측, docs/archive/api_findings.md B-8·B-9). 용도가 바뀌어도 이 자리는
     비우지 않고, 코딩에서는 코드를 온전히 쓰라는 지시로 갈아끼운다.
     """
     parts = [PURPOSE_INSTRUCTIONS.get(purpose, ""), length_instruction(model_id, purpose)]
