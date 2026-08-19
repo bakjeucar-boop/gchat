@@ -2453,32 +2453,32 @@ markdown 컨테이너의 <code>p</code> 요소로 그리고, <strong>그 <code>p
 <tr>
 <td>8.1 조용히 잘못 도는 것</td>
 <td>2</td>
-<td>5</td>
-<td>1</td>
+<td>6</td>
+<td>0</td>
 <td>0</td>
 <td>8</td>
 </tr>
 <tr>
 <td>8.2 화면에 안 보이는 것</td>
 <td>0</td>
-<td>0</td>
-<td>4</td>
+<td>2</td>
+<td>2</td>
 <td>0</td>
 <td>4</td>
 </tr>
 <tr>
 <td>8.3 Streamlit 특유</td>
 <td>1</td>
-<td>0</td>
-<td>6</td>
+<td>2</td>
+<td>4</td>
 <td>1</td>
 <td>8</td>
 </tr>
 <tr>
 <td>8.4 화면 문구</td>
 <td>0</td>
-<td>0</td>
-<td>3</td>
+<td>1</td>
+<td>2</td>
 <td>0</td>
 <td>3</td>
 </tr>
@@ -2509,16 +2509,19 @@ markdown 컨테이너의 <code>p</code> 요소로 그리고, <strong>그 <code>p
 <tr>
 <td><strong>합계</strong></td>
 <td><strong>3</strong></td>
-<td><strong>5</strong></td>
-<td><strong>19</strong></td>
+<td><strong>11</strong></td>
+<td><strong>13</strong></td>
 <td><strong>6</strong></td>
 <td><strong>33</strong></td>
 </tr>
 </tbody>
 </table></div>
-<p><strong>이 표에서 읽을 것은 C의 비중이다.</strong> 33건 중 19건이 &quot;사람이 기억해야 한다&quot;에 머물러
-있고, 8.2·8.4·8.6은 <strong>전부 C다.</strong> 이 세 분류가 다음에 재발할 후보다. 실제로 8.2는
-같은 결함이 두 번 났고(멈춤 버튼, 계열 전환 확인 창) 두 번째가 나서야 원칙이 됐다.</p>
+<p><strong>이 표는 승급 작업(8.8절) 후의 값이다.</strong> 처음 집계는 A 3 · B 5 · C 19 · D 6 이었고,
+C 여섯 건이 B 로 내려왔다.</p>
+<p><strong>이 표에서 읽을 것은 C의 비중이다.</strong> 33건 중 13건이 아직 &quot;사람이 기억해야 한다&quot;에
+머물러 있다. 처음에는 19건이었고 8.2·8.4·8.6이 <strong>전부 C</strong>였다 — 그 상태가 다음 재발
+후보를 가리켰다. 실제로 8.2는 같은 결함이 두 번 났고(멈춤 버튼, 계열 전환 확인 창)
+두 번째가 나서야 원칙이 됐다. 승급 후에도 <strong>8.6은 여전히 전부 C</strong>다.</p>
 <p>A와 B가 8.1에 몰린 것도 우연이 아니다. 조용히 잘못 도는 부류는 사람이 알아챌 수 없어서
 구조나 테스트로 막을 수밖에 없다. 반대로 8.5(플랫폼)는 우리가 손댈 수 있는 자리가
 없어 D가 정상이다.</p>
@@ -2624,7 +2627,7 @@ Gemma 두 모델만 본문이 비어 나왔고, <code>usage_metadata</code>를 �
 <code>코딩_용도에서는_글자수_목표를_주지_않는다</code>, <code>용도별_상한은_모델_자체_상한을_넘지_않는다</code>.</li>
 <li><strong>근거</strong> — 커밋 <code>34eb0a7</code> / <code>tests/test_models.py</code></li>
 </ul>
-<p><strong>상한만 준 인스트럭션이 답을 지시의 38%로 줄임 (C)</strong></p>
+<p><strong>상한만 준 인스트럭션이 답을 지시의 38%로 줄임 (B)</strong></p>
 <ul>
 <li><strong>증상</strong> — 답변이 목표보다 훨씬 짧다. 잘린 것이 아니라 모델이 스스로 짧게 쓴다.</li>
 <li><strong>알아챈 방법</strong> — 측정. 인스트럭션의 효과를 확인하려고 같은 질문 3개를 문구 유무로
@@ -2633,14 +2636,16 @@ Gemma 두 모델만 본문이 비어 나왔고, <code>usage_metadata</code>를 �
 <li><strong>원인</strong> — 상한만 주면 모델은 계속 아래로 내려간다.</li>
 <li><strong>해법</strong> — 하한 지시(&quot;너무 짧게 줄이지 말고&quot;)를 넣었다. 평균이 1,301토큰으로
 올라오고 편차도 줄었다 (7.5절).</li>
-<li><strong>재발 방지 (C)</strong> — 자동으로 막을 방법이 없다. 문구를 고칠 때마다 다시 재는 것이
-유일한 방법이며, 그 규칙을 7.5절에 적어 두었다.</li>
+<li><strong>재발 방지 (B)</strong> — 답변 길이 자체는 실호출이 필요해 검사할 수 없지만
+<strong>재측정을 강제할 수는 있다.</strong> <code>test_인스트럭션_문구가_바뀌면_재측정을_요구한다</code>가
+문구 상수의 해시를 지키고, 바뀌면 7.5절 측정을 다시 하라고 알린다.
+해시만 갱신하고 측정을 건너뛰는 것은 막지 못한다.</li>
 <li><strong>근거</strong> — <code>api_findings.md</code> B-8·B-9 / 커밋 <code>bd9d160</code></li>
 </ul>
 <h3 id="s-8-2">8.2 화면에 안 보이는 부류</h3>
 <p><strong>네 건 모두 C이며, 네 건 모두 사용자 신고로 발견됐다.</strong> 자동 검사는 요소가
 &quot;존재하는지&quot;만 볼 수 있고 &quot;보이는지&quot;는 보지 못한다. 이 분류가 존재하는 이유다.</p>
-<p><strong>멈춤 버튼이 안 보인다 (C)</strong></p>
+<p><strong>멈춤 버튼이 안 보인다 (B)</strong></p>
 <ul>
 <li><strong>증상</strong> — 스트리밍 중에 멈춤 버튼이 화면에 없다.</li>
 <li><strong>알아챈 방법</strong> — 사용자 신고. 브라우저에서 재현해 보니 <strong>버튼은 렌더링되고 있었다</strong>
@@ -2650,10 +2655,13 @@ Gemma 두 모델만 본문이 비어 나왔고, <code>usage_metadata</code>를 �
 아래에 있으므로 위쪽에 그린 것은 화면 밖이다.</li>
 <li><strong>해법</strong> — <code>st.container(key=...)</code> + <code>position: fixed</code>로 입력창 위에 고정했다.
 <code>sticky</code>는 스크롤이 그 지점까지 가야 붙어서 부족했다.</li>
-<li><strong>재발 방지 (C)</strong> — 배치 원칙(9장). 자동 테스트는 없다.</li>
+<li><strong>재발 방지 (B)</strong> — <code>test_멈춤_버튼은_화면에_고정된다</code>와
+<code>test_멈춤_버튼의_CSS_선택자와_컨테이너_키가_같다</code>가 고정 CSS 와 컨테이너 키의
+대응을 지킨다. 좌표는 보지 못하므로 <strong>원칙(9.3절)과 수동 확인(12.4절)이 여전히
+필요하다.</strong></li>
 <li><strong>근거</strong> — 커밋 <code>6789984</code> / 7.7절</li>
 </ul>
-<p><strong>계열 전환 확인 창이 안 뜬다 (C)</strong></p>
+<p><strong>계열 전환 확인 창이 안 뜬다 (B)</strong></p>
 <ul>
 <li><strong>증상</strong> — 모델을 다른 계열로 바꿔도 확인 창이 나오지 않는다. 새 대화를 누르면
 그제야 나타난다.</li>
@@ -2663,9 +2671,10 @@ Gemma 두 모델만 본문이 비어 나왔고, <code>usage_metadata</code>를 �
 <li><strong>원인</strong> — 멈춤 버튼과 같다. 본문 맨 위에 그렸다.</li>
 <li><strong>해법</strong> — 사이드바의 모델 드롭다운 <strong>바로 아래</strong>로 옮겼다. 조작한 위젯 옆이라
 스크롤 위치와 무관하다. 좁은 폭에 맞춰 3버튼을 세로로 쌓았다.</li>
-<li><strong>재발 방지 (C)</strong> — <strong>같은 결함이 두 번 나서야 원칙이 됐다.</strong> 배치 원칙에는 해법
+<li><strong>재발 방지 (B)</strong> — <strong>같은 결함이 두 번 나서야 원칙이 됐다.</strong> 배치 원칙에는 해법
 두 가지(<code>position: fixed</code> / 조작한 위젯 옆)와 검증 조건(메시지 20개 이상)이 함께
-들어갔다.</li>
+들어갔고, <code>test_계열_전환_확인은_모델_드롭다운_옆에서_그려진다</code>가 확인 창이 사이드바
+설정 안 드롭다운 아래에 있는지 지킨다.</li>
 <li><strong>근거</strong> — 커밋 <code>bd93978</code> / 9장 / 12장 검증 4·5·6번</li>
 </ul>
 <p><strong>멈춤을 누르면 받은 답이 통째로 사라짐 (C)</strong></p>
@@ -2694,17 +2703,18 @@ Gemma 두 모델만 본문이 비어 나왔고, <code>usage_metadata</code>를 �
 <li><strong>근거</strong> — 커밋 <code>a18a007</code> / <code>gchat/ui/chat.py</code></li>
 </ul>
 <h3 id="s-8-3">8.3 Streamlit 특유의 것</h3>
-<p><strong>위젯 키를 사후 대입 — 일괄 삭제 (C)</strong></p>
+<p><strong>위젯 키를 사후 대입 — 일괄 삭제 (B)</strong></p>
 <ul>
 <li><strong>증상</strong> — 전체 삭제를 실행하면 <code>StreamlitAPIException</code>이 난다.</li>
 <li><strong>알아챈 방법</strong> — 예외 발생. 이 분류는 대개 예외가 나므로 발견은 쉽다.</li>
 <li><strong>원인</strong> — 체크박스 위젯이 그려진 뒤 그 키에 값을 대입했다.</li>
 <li><strong>해법</strong> — 대입을 없앴다. 대화가 사라지면 그 expander 자체가 그려지지 않아 상태도
 함께 버려진다.</li>
-<li><strong>재발 방지 (C)</strong> — Streamlit 제약을 아는 것. 코드에 주석으로 남겼다.</li>
+<li><strong>재발 방지 (B)</strong> — <code>test_위젯_키_대입은_콜백_안에서만_한다</code>가 위젯 키에 대입하는
+자리를 AST 로 찾아 콜백 밖이면 실패한다. 코드 주석도 그대로 남겼다.</li>
 <li><strong>근거</strong> — 커밋 <code>5f83d98</code> / <code>gchat/ui/sidebar.py</code></li>
 </ul>
-<p><strong>위젯 키를 사후 대입 — 계열 전환 확인 (C)</strong></p>
+<p><strong>위젯 키를 사후 대입 — 계열 전환 확인 (B)</strong></p>
 <ul>
 <li><strong>증상</strong> — 확인 창의 전환·취소 버튼을 누르면 <code>StreamlitAPIException</code>이 난다.</li>
 <li><strong>알아챈 방법</strong> — 예외 발생.</li>
@@ -2712,8 +2722,8 @@ Gemma 두 모델만 본문이 비어 나왔고, <code>usage_metadata</code>를 �
 되돌려야 하는데, 그 위젯이 이미 그려진 뒤였다.</li>
 <li><strong>해법</strong> — <code>on_click</code> 콜백으로 옮겼다. 콜백은 <strong>다음 실행의 위젯 생성 전에</strong> 돌아서
 대입이 허용된다.</li>
-<li><strong>재발 방지 (C)</strong> — 같은 이유로 &quot;모델 기본값으로 되돌리기&quot;도 콜백이다. 함수
-docstring에 이유를 적었다.</li>
+<li><strong>재발 방지 (B)</strong> — 같은 이유로 &quot;모델 기본값으로 되돌리기&quot;도 콜백이다. 함수
+docstring에 이유를 적었고, 위와 같은 AST 검사가 이 자리도 함께 지킨다.</li>
 <li><strong>근거</strong> — 커밋 <code>a895518</code> / <code>gchat/ui/controls.py</code></li>
 </ul>
 <p><strong>인증에 성공해도 비밀번호 칸이 남음 (C)</strong></p>
@@ -2784,7 +2794,7 @@ docstring에 이유를 적었다.</li>
 </ul>
 <h3 id="s-8-4">8.4 화면 문구</h3>
 <p><strong>세 건 모두 C다.</strong> 문구는 컴파일되지 않고 테스트되지도 않는다. 사람이 읽어야 안다.</p>
-<p><strong>개발 문서 용어가 화면에 노출 (C)</strong></p>
+<p><strong>개발 문서 용어가 화면에 노출 (B)</strong></p>
 <ul>
 <li><strong>증상</strong> — 화면에 &quot;(계획서 1.4절)&quot;, &quot;서버 429가 최종 진실&quot; 같은 문구와 원본 400 JSON이
 그대로 보인다.</li>
@@ -2792,7 +2802,11 @@ docstring에 이유를 적었다.</li>
 <li><strong>원인</strong> — 개발 문서의 어휘와 사용자 화면의 어휘를 분리하지 않았다.</li>
 <li><strong>해법</strong> — 화면 문구를 전수로 다시 썼다. 근거는 주석과 docstring에만 남기고, 원본
 오류는 &quot;자세한 내용&quot; 접기 안으로 넣었다.</li>
-<li><strong>재발 방지 (C)</strong> — 화면 문구 원칙(9장).</li>
+<li><strong>재발 방지 (B)</strong> — <code>test_화면_문구에_개발_용어가_없다</code>가 위젯 호출의 문자열과
+예외 <code>__str__</code> 문구를 모아 금지 패턴(문서 절 번호·HTTP 상태 코드·원본 JSON·내부
+식별자)을 찾는다. <strong>f-string 안 변수의 값은 보지 못한다</strong> — 이 사례의 원본 JSON
+유출이 바로 그 형태였으므로 같은 사고를 다시 잡지는 못한다. 원칙(9.3절)이 여전히
+필요하다.</li>
 <li><strong>근거</strong> — 커밋 <code>a18a007</code></li>
 </ul>
 <p><strong>라벨과 값의 단위가 다름 (C)</strong></p>
@@ -2938,9 +2952,8 @@ docstring에 이유를 적었다.</li>
 <li><strong>재발 방지 (D)</strong> — 없다.</li>
 </ul>
 <h3 id="s-8-8">8.8 등급을 올릴 수 있는 항목</h3>
-<p>C 중에서 A나 B로 올릴 수 있어 보이는 것들이다. <strong>아직 구현하지 않았다</strong> — 목록만
-만들고 채택 여부는 판단에 맡긴다. D는 플랫폼 쪽이라 올릴 수 없는 것이 정상이므로
-넣지 않았다.</p>
+<p>C 중에서 A나 B로 올릴 수 있어 보이는 것들이다. <strong>채택한 넷은 구현을 마쳤다</strong>
+(<code>tests/test_guards.py</code>). D는 플랫폼 쪽이라 올릴 수 없는 것이 정상이므로 넣지 않았다.</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -2953,33 +2966,39 @@ docstring에 이유를 적었다.</li>
 <tbody>
 <tr>
 <td>8.2 배치 원칙</td>
-<td>C</td>
-<td>B</td>
-<td>즉시 반응 UI를 감싸는 컨테이너에 고정 CSS가 붙어 있는지 소스 검사. 화면 좌표까지는 못 보지만 &quot;고정을 실수로 지웠다&quot;는 회귀는 잡는다</td>
+<td>C → <strong>B 완료</strong></td>
+<td>고정 CSS 소스 검사</td>
+<td>컨테이너 키와 CSS 선택자의 대응까지 본다. 화면 좌표는 못 본다</td>
 </tr>
 <tr>
 <td>8.4 개발 용어 노출</td>
-<td>C</td>
-<td>B</td>
-<td>화면 문자열에 금지 패턴(문서 절 번호, HTTP 상태 코드, 원본 JSON 중괄호)이 없는지 소스 스캔. <code>test_client.py</code>가 샘플링 파라미터에 이미 같은 방식을 쓴다</td>
+<td>C → <strong>B 완료</strong></td>
+<td>화면 문자열 스캔</td>
+<td>위젯 호출 인자와 예외 <code>__str__</code> 를 모아 금지 패턴을 찾는다. f-string 안 변수는 못 본다</td>
 </tr>
 <tr>
 <td>8.3 위젯 키 사후 대입</td>
-<td>C</td>
-<td>B</td>
-<td>위젯 키에 대한 대입이 <code>on_click</code> 콜백 안에서만 일어나는지 AST 검사</td>
+<td>C → <strong>B 완료</strong></td>
+<td>AST 검사</td>
+<td><code>key=</code> 로 넘긴 키에 대한 대입이 콜백(또는 초기화) 안에 있는지 본다</td>
 </tr>
 <tr>
 <td>8.6 문서 동기화</td>
 <td>C</td>
-<td>B</td>
-<td>설계 문서의 부록과 지시서 공통부가 일치하는지 테스트. 지금은 사람이 매번 diff로 한다</td>
+<td>(보류)</td>
+<td>부록 C 사본과 <code>CLAUDE.md</code> 의 일치는 <code>tests/test_docs.py</code> 가 이미 지킨다. 나머지 문서 절차는 여전히 사람이 본다</td>
 </tr>
 <tr>
 <td>8.1 인스트럭션 문구 변경 후 재측정 누락</td>
 <td>C</td>
 <td>B</td>
 <td>문구 상수의 해시를 테스트에 박아 둔다. 문구가 바뀌면 실패하면서 &quot;7.5절 측정을 다시 하고 해시를 갱신하라&quot;고 알린다. 답변 길이 자체는 실호출이 필요해 자동화가 무리지만 <strong>재측정을 강제할 수는 있다</strong></td>
+</tr>
+<tr>
+<td>8.1 인스트럭션 문구 변경 후 재측정 누락</td>
+<td>C → <strong>B 완료</strong></td>
+<td>문구 해시 가드</td>
+<td>문구가 바뀌면 실패하며 7.5절 재측정을 요구한다. 해시만 갱신하는 것은 못 막는다</td>
 </tr>
 <tr>
 <td>8.4 라벨-단위 불일치</td>
@@ -2989,16 +3008,23 @@ docstring에 이유를 적었다.</li>
 </tr>
 </tbody>
 </table></div>
-<p><strong>결정: 채택 4건 · 보류 1건.</strong> 개발 용어 스캔, 위젯 키 AST 검사, 고정 CSS 소스
-검사, 인스트럭션 문구 해시를 채택한다. 라벨-단위 검사는 보류한다.
-문서 동기화 검사는 <strong>부록 C 사본에 한해 이미 만들었다</strong> (<code>tests/test_docs.py</code>).</p>
-<p><strong>승급 작업은 기술서를 다 쓴 뒤에 한다.</strong> 지금 코드를 고치면 8.0절 집계표가 그 순간
-틀려지고 앞 장을 되돌아가 고쳐야 한다.</p>
-<p><strong>고정 CSS 검사에는 한계가 있다.</strong> 기존 요소에서 고정이 사라진 회귀는 잡지만,
-<strong>새로 추가되는 UI가 원칙을 어기는 것은 잡지 못한다.</strong> 이 한계를 테스트 주석에
-명시할 것 — 없으면 다음 사람이 &quot;테스트가 통과했으니 배치는 안전하다&quot;고 오해한다.</p>
-<p><strong>문서 동기화 항목은 계획서 동결·이동 후에 형태가 바뀐다.</strong> 기술서가 유일한 원본이
-되면 대조 대상이 달라지므로, 그 정리가 끝난 뒤에 만드는 편이 낫다.</p>
+<p><strong>결과: 채택 4건 완료 · 보류 2건.</strong> 넷 다 <code>tests/test_guards.py</code> 에 있고, C 여섯
+건이 B 로 내려왔다 (8.0절 집계표).</p>
+<p><strong>넷 다 소스를 검사하는 테스트다.</strong> 동작 테스트와 달리 &quot;통과했다&quot;가 &quot;안전하다&quot;를
+뜻하지 않는다. 그래서 각 검사에 <strong>무엇을 잡고 무엇을 못 잡는지</strong>를 주석으로 적었다.
+그 구멍을 모르면 &quot;테스트가 통과했으니 원칙은 지켜지고 있다&quot;는 오해가 생기고, 그런
+오해를 만드는 테스트는 없는 것보다 나쁘다.</p>
+<p><strong>여섯 건 모두 변형 시험으로 실제 검출을 확인했다</strong> — 위반을 하나씩 심어 넣고 해당
+테스트가 실패하는지 본 뒤 되돌렸다. 이 과정에서 두 가지가 드러났다.</p>
+<ul>
+<li>위젯 키 검사를 <code>ui/</code> 로만 한정했다면 대상이 0건이라 <strong>언제나 통과하는 테스트</strong>가
+됐을 것이다. 대입은 <code>state.py</code> 에 있다. 그래서 범위를 <code>gchat/</code> 전체로 넓혔다</li>
+<li>콜백 등록을 지우는 변형은 <strong>잡히지 않았다.</strong> 다른 콜백에서 같은 함수에 닿으면 대입
+위치는 여전히 정상이기 때문이다. 등록 누락은 이 검사 밖이며, 그 사실을 주석에 적었다</li>
+</ul>
+<p>보류 둘은 성격이 다르다. 문서 동기화는 <strong>부록 C 사본에 한해 이미 실현됐고</strong>
+(<code>tests/test_docs.py</code>), 나머지 문서 절차는 사람이 본다. 라벨-단위 검사는 오탐이 커서
+남겨 둔다.</p>
 <h2 id="ch-9">9장. 작업 원칙</h2>
 <p>이 장이 <code>CLAUDE.md</code>의 출처다. <strong>각 원칙에 어디서 나왔는지를 붙였다</strong> — 근거 없는
 원칙은 지켜지지 않는다.</p>
@@ -3028,6 +3054,12 @@ docstring에 이유를 적었다.</li>
 어디서 왔나 — 8.1절의 B등급 다섯 건. 구조로 못 막는 것은 잘못하면 실패하게 만든다.
 <code>client.py</code>가 샘플링 파라미터를 쓰지 않는다는 것은 소스에 그 이름이 등장하는지까지
 검사한다.</p>
+<p><strong>소스를 검사하는 테스트는 변형 시험으로 검출을 확인하기 전까지 믿지 않는다.</strong>
+어디서 왔나 — 8.8절 승급 작업. 소스 검사는 동작 테스트와 달리 &quot;통과했다&quot;가
+&quot;안전하다&quot;를 뜻하지 않는다. 위반을 하나 심어 넣고 실제로 실패하는지 본 뒤에야
+그 테스트를 신뢰한다. 실제로 위젯 키 검사를 <code>ui/</code> 로만 한정했다면 대상이 0건이라
+<strong>언제나 통과하는 테스트</strong>가 될 뻔했고, 변형 시험이 아니었다면 그대로 남았을 것이다.
+같은 이유로 <strong>각 소스 검사에는 무엇을 못 잡는지를 주석으로 적는다.</strong></p>
 <p><strong>알아채기 쉬운 결함일수록 방어가 약해진다.</strong>
 어디서 왔나 — 8.0절 등급표. 33건 중 19건이 C(사람이 기억해야 함)이고, 8.2·8.4·8.6은
 <strong>전부 C</strong>다. 조용히 잘못 도는 부류(8.1)에 A·B가 몰린 것은 사람이 알아챌 수 없어
@@ -3381,10 +3413,19 @@ python scripts/build_docs.py --check    # 갱신이 필요한지만 확인
 <td><code>test_auth.py</code></td>
 <td>상수 시간 비교, 5회 잠금, 비밀번호를 상태에 남기지 않는 것</td>
 </tr>
+<tr>
+<td><code>test_guards.py</code></td>
+<td><strong>원칙을 지키는 소스 검사</strong> — 배치·위젯 키·화면 문구·인스트럭션 해시 (8.8절)</td>
+</tr>
+<tr>
+<td><code>test_docs.py</code></td>
+<td>HTML 이 md 와 어긋나지 않는 것, 부록 C 사본이 <code>CLAUDE.md</code> 와 같은 것</td>
+</tr>
 </tbody>
 </table></div>
-<p><strong>화면 계층에는 자동 테스트가 없다.</strong> 그래서 8.2·8.3·8.4의 결함이 전부 사람 눈으로
-발견됐다. 이 공백을 일부 메우는 방법이 8.8절에 있다.</p>
+<p><strong>화면 계층에는 동작 테스트가 없다.</strong> 그래서 8.2·8.3·8.4의 결함이 전부 사람 눈으로
+발견됐다. 승급 작업(8.8절)으로 <code>test_guards.py</code> 가 그 공백을 <strong>일부</strong> 메웠지만, 소스에
+표식이 남아 있는지만 보므로 화면 좌표와 문구의 자연스러움은 여전히 사람이 봐야 한다.</p>
 <h3 id="s-12-3">12.3 긴 대화에서만 재현되는 항목</h3>
 <p><strong>메시지 20개 이상 쌓인 상태에서 봐야 하는 것들이다.</strong> 짧은 대화에서는 통과한다.</p>
 <ul>
@@ -3427,7 +3468,7 @@ console.log({ top: Math.round(r.top), 화면높이: window.innerHeight,
 </tr>
 <tr>
 <td><code>models.py</code> 인스트럭션 문구</td>
-<td>없음 <strong>(승급 예정 — 8.8절)</strong></td>
+<td><code>pytest tests/test_guards.py</code> (해시가 바뀌어 실패한다 — 재측정 후 갱신)</td>
 <td><strong>같은 질문 3개로 답변 길이 재측정</strong> (7.5절). 이걸 건너뛰면 지시의 38%로 떨어져도 모른다</td>
 </tr>
 <tr>
@@ -3457,18 +3498,28 @@ console.log({ top: Math.round(r.top), 화면높이: window.innerHeight,
 </tr>
 <tr>
 <td><code>ui/</code> 배치</td>
-<td>없음</td>
-<td><strong>12.4절 절차</strong> (긴 대화 상태)</td>
+<td><code>pytest tests/test_guards.py</code></td>
+<td><strong>12.4절 절차</strong> (긴 대화 상태). 소스 검사는 좌표를 보지 못한다</td>
 </tr>
 <tr>
 <td><code>ui/</code> 문구</td>
-<td>없음</td>
+<td><code>pytest tests/test_guards.py</code></td>
 <td>바꾼 문구가 나오는 화면 전부. 숫자가 함께 있으면 단위 확인 (9.3절)</td>
 </tr>
 <tr>
 <td>새 모델 추가</td>
 <td><code>pytest tests/test_models.py</code></td>
 <td><strong>10.5절의 실측 6종을 먼저</strong></td>
+</tr>
+<tr>
+<td>문서 (<code>docs/gchat_기술서.md</code>)</td>
+<td><code>python scripts/build_docs.py</code> 후 <code>pytest tests/test_docs.py</code></td>
+<td>HTML 을 열어 목차와 표</td>
+</tr>
+<tr>
+<td>소스 검사 테스트 자체</td>
+<td><code>pytest tests/test_guards.py</code></td>
+<td><strong>변형 시험</strong> — 위반을 심어 실제로 실패하는지 (9.2절)</td>
 </tr>
 </tbody>
 </table></div>
@@ -3891,8 +3942,8 @@ python scripts/build_docs.py
 <p>한도 문서 링크는 실측에서 받은 429 응답이 직접 가리킨 주소다 (7.1절).</p>
 </main>
 <footer>
-<p>원본: <code>docs/gchat_기술서.md</code> · 내용 해시 <code>2cba788a3b3f4d77</code></p>
-<p data-volatile="1">원본 커밋: <code>90fafaf141d3</code> · 커밋 시각 2026-08-19T21:40:36+09:00</p>
+<p>원본: <code>docs/gchat_기술서.md</code> · 내용 해시 <code>b68e04a742fe5835</code></p>
+<p data-volatile="1">원본 커밋: <code>d4c314ff631d</code> · 커밋 시각 2026-08-19T21:55:54+09:00</p>
 <p>이 HTML 은 <code>scripts/build_docs.py</code> 가 만든 생성물입니다.</p>
 </footer>
 </body>
